@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+build/
+*.iso
+network-discovery.json
+network-discovery.txt
+.ansible/
+*.retry

@@ -1,0 +1,10 @@
+---
+- name: Install and initialize combined region and rack MAAS
+  ansible.builtin.command:
+    argv: [python3, -m, maas_deploy, maas]
+  environment:
+    PYTHONPATH: "{{ playbook_dir }}/.."
+    MAAS_DEPLOY_ROOT: "{{ playbook_dir }}/.."
+  register: maas_result
+  changed_when: maas_result.stdout == "changed"
+  no_log: true

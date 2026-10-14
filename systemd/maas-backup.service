@@ -1,0 +1,9 @@
+[Unit]
+Description=Backup the MAAS PostgreSQL database
+After=postgresql.service snap.maas.supervisor.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/maas-deploy/scripts/backup-maas.sh
+User=root
+Group=root

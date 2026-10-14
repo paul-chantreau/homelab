@@ -1,0 +1,10 @@
+---
+- name: Configure the provisioning subnet and leave DHCP disabled
+  ansible.builtin.command:
+    argv: [python3, -m, maas_deploy, network]
+  environment:
+    PYTHONPATH: "{{ playbook_dir }}/.."
+    MAAS_DEPLOY_ROOT: "{{ playbook_dir }}/.."
+  register: network_result
+  changed_when: network_result.stdout == "ready"
+  no_log: true

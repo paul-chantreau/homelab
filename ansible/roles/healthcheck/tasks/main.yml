@@ -1,0 +1,25 @@
+---
+- name: Install health check units
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../systemd/{{ item }}"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - maas-healthcheck.service
+    - maas-healthcheck.timer
+    - maas-firstboot.service
+
+- name: Enable the health check timer
+  ansible.builtin.systemd:
+    name: maas-healthcheck.timer
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Enable first-boot provisioning on future boots
+  ansible.builtin.systemd:
+    name: maas-firstboot.service
+    enabled: true
+    daemon_reload: true

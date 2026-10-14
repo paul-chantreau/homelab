@@ -1,0 +1,46 @@
+# Canonical deployment configuration.
+# Network addresses live only in config/network.yaml.
+deployment:
+  hostname: maas-controller
+  timezone: Etc/UTC
+  locale: en_US.UTF-8
+  keyboard_layout: us
+  admin_user: maasadmin
+  # Public keys only. The ISO refuses to install until this list is non-empty.
+  ssh_authorized_keys: []
+
+  disk:
+    # Identify exactly one disk. /dev/sda and "the largest disk" are rejected.
+    serial: null
+    wwn: null
+    by_id: null
+    model: null
+    # Set true only after you have recorded which physical disk will be erased.
+    confirm_erase: false
+
+  ubuntu:
+    release: "24.04.5"
+    codename: noble
+    iso_name: ubuntu-24.04.5-live-server-amd64.iso
+    # Published in https://releases.ubuntu.com/24.04.5/SHA256SUMS
+    sha256: "97f3d7ffb032c3eb3b23d2c8be9cc76e60c2c1f2c0146ba5ba9fe01cafae0fd8"
+    base_url: "https://releases.ubuntu.com/24.04.5/"
+
+  maas:
+    # MAAS 3.7 is the release verified for Ubuntu 24.04 and PostgreSQL 16.
+    channel: "3.7/stable"
+    mode: region+rack
+    admin_username: admin
+    admin_email: admin@maas.local
+    image_release: noble
+
+  postgresql:
+    major: 16
+    database: maas
+    user: maas
+
+  backup:
+    directory: /var/backups/maas
+    # Optional rsync destination such as backup@fileserver:/srv/maas. Null keeps dumps local.
+    offhost_target: null
+    retain: 14

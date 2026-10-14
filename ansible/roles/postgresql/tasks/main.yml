@@ -1,0 +1,19 @@
+---
+- name: Install production PostgreSQL
+  ansible.builtin.apt:
+    name:
+      - postgresql
+      - postgresql-client
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Create the MAAS database without recreating it on later runs
+  ansible.builtin.command:
+    argv: [python3, -m, maas_deploy, postgres]
+  environment:
+    PYTHONPATH: "{{ playbook_dir }}/.."
+    MAAS_DEPLOY_ROOT: "{{ playbook_dir }}/.."
+  register: postgres_result
+  changed_when: postgres_result.stdout == "changed"
+  no_log: true

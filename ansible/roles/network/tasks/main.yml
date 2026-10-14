@@ -1,0 +1,36 @@
+---
+- name: Refuse an incomplete network configuration
+  ansible.builtin.command:
+    argv:
+      - python3
+      - "{{ playbook_dir }}/../scripts/validate-config.py"
+      - --mode
+      - install
+      - --network
+      - "{{ playbook_dir }}/../config/network.yaml"
+      - --deployment
+      - "{{ playbook_dir }}/../config/deployment.yaml"
+  changed_when: false
+
+- name: Render Netplan from the canonical network configuration
+  ansible.builtin.command:
+    argv: [python3, -m, maas_deploy, render-netplan]
+  environment:
+    PYTHONPATH: "{{ playbook_dir }}/.."
+    MAAS_DEPLOY_ROOT: "{{ playbook_dir }}/.."
+  changed_when: true
+
+- name: Stop cloud-init from managing Netplan after installation
+  ansible.builtin.copy:
+    dest: /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg
+    mode: "0644"
+    content: "network: {config: disabled}\n"
+
+- name: Remove the cloud-init Netplan file
+  ansible.builtin.file:
+    path: /etc/netplan/50-cloud-init.yaml
+    state: absent
+
+- name: Apply Netplan
+  ansible.builtin.command: netplan apply
+  changed_when: true

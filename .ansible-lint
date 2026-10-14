@@ -1,0 +1,9 @@
+---
+profile: basic
+exclude_paths:
+  - tests/
+  - build/
+  - .git/
+skip_list:
+  - yaml[line-length]
+  - name[template]
