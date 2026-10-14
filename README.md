@@ -1,29 +1,25 @@
-# Production MAAS on one Ubuntu server and a Netgear GS724T
+# Production MAAS on one Ubuntu server and a Netgear GS724Tv4
 
 This repository builds an Ubuntu Server 24.04 LTS autoinstall ISO, boots it from USB, and lets Ansible on that machine install MAAS with a local PostgreSQL database. The switch is configured by hand in its web interface. MAAS DHCP stays off until a person validates the provisioning VLAN and types an explicit confirmation.
 
-Stop here until the switch has been identified. The rest of this guide depends on the hardware revision printed on the switch.
+The switch is a GS724Tv4. This repository does not support another GS724T hardware revision. Confirm the label reads GS724Tv4 before changing a port. If it does not, stop.
 
 Record all of the following before changing a port, building an ISO, or installing Ubuntu:
 
-1. Exact hardware revision, such as GS724Tv3, GS724Tv4, or GS724Tv6.
+1. Confirmation that the label reads GS724Tv4.
 2. Firmware version shown by the switch.
 3. Switch management IP address.
 4. Physical port numbers for the router, the MAAS server, and each future machine.
 5. Existing VLAN membership and PVID of every port you might touch.
 6. Existing switch management VLAN.
 
-The revision and firmware in this repository are unknown on purpose. `config/network.yaml` leaves them null. The installer refuses to erase a disk until they are filled in from the switch itself. Do not use a newer GS724T manual for an older revision, and do not assume that a Layer 3 feature advertised for a later revision exists on the switch in the rack.
+`config/network.yaml` already sets `hardware_revision` to `GS724Tv4`. Firmware and physical addresses stay null until you read them from the switch and the LAN. The installer refuses to erase a disk until those remaining values are filled in.
 
-Official documents used for the procedures below:
+The procedure uses the GS724Tv4 administration manual (25 September 2013, covers GS716Tv3, GS724Tv4, and GS748Tv5): <https://www.downloads.netgear.com/files/GDC/GS716TV3/GS716Tv3_GS724Tv4_GS748Tv5_SWA_25Sept2013.pdf>
 
-- GS724Tv3 administration manual (15 February 2012, covers GS716Tv2 and GS724Tv3): <https://www.downloads.netgear.com/files/GS716T_GS724T_SWA_15Feb12.pdf>
-- GS724Tv4 administration manual (25 September 2013, covers GS716Tv3, GS724Tv4, and GS748Tv5): <https://www.downloads.netgear.com/files/GDC/GS716TV3/GS716Tv3_GS724Tv4_GS748Tv5_SWA_25Sept2013.pdf>
-- GS724T product and support page: <https://www.netgear.com/business/wired/switches/smart-cloud/gs724t/>
+The current product page may feature a newer revision: <https://www.netgear.com/business/wired/switches/smart-cloud/gs724t/>. Use the 2013 manual above, not the manual highlighted for a later switch.
 
-The GS724Tv6 menu names in section F come from the GS724Tv6 user manual. Download that manual from the support downloads for the revision on the label. The product page above features the current switch, and its featured manual may be the wrong revision.
-
-This article does not apply to the GS724T and must not be used as the procedure: <https://kb.netgear.com/31026/How-to-configure-a-VLAN-on-a-NETGEAR-managed-switch>. It describes fully managed switches on firmware 11 and later. Its menu puts VLAN creation under Switching, VLAN, Advanced. The GS724Tv3, GS724Tv4, and GS724Tv6 manuals put VLAN creation under Switching, VLAN, Basic.
+This article does not apply to the GS724Tv4 and must not be used as the procedure: <https://kb.netgear.com/31026/How-to-configure-a-VLAN-on-a-NETGEAR-managed-switch>. It describes fully managed switches on firmware 11 and later. Its menu puts VLAN creation under Switching, VLAN, Advanced. The GS724Tv4 manual puts VLAN creation under Switching, VLAN, Basic.
 
 Virtual tests in this repository do not configure a GS724T and do not prove that VLAN 100 is isolated. That check happens on site, after the web interface has been changed, using the procedure in section M.
 
@@ -76,7 +72,7 @@ There is one physical Ethernet port on the server. The management LAN and the pr
                             |
                      Existing LAN
                             |
-                  NETGEAR GS724T
+                  NETGEAR GS724Tv4
                     24-port switch
                             |
           +-----------------+-------------------+
@@ -132,7 +128,7 @@ These are four different paths:
 For fewer than 10 machines, keep the provisioning VLAN isolated. When a deployed machine needs general network access, change that machine's switch port back to the management LAN in the web interface and give the machine an address that belongs on that LAN. That is a separate change. Do not enable these alternatives unless a later design explicitly approves them:
 
 1. Inter-VLAN routing on the existing router. This deployment does not add the provisioning VLAN to the router port.
-2. GS724T Layer 3 routing. The v3 administration manual has no VLAN routing chapter. The v4 and v6 manuals document Routing, VLAN pages. Those pages stay unused. A datasheet for a newer revision is not evidence that an older revision can route.
+2. GS724Tv4 Layer 3 routing. The administration manual documents Routing, VLAN, VLAN Routing Wizard and VLAN Routing. Those pages stay unused.
 3. NAT or IP forwarding on Ubuntu. The validator rejects `ubuntu_nat: true`, and the host sysctl keeps `ip_forward` at 0.
 
 ## B. Hardware prerequisites
@@ -146,14 +142,11 @@ One dedicated bare-metal server:
 - UEFI or legacy BIOS boot from USB. The ISO keeps the Ubuntu El Torito image, protective MBR, and appended EFI partition.
 - Out-of-band or local console access. The installed account password is locked. Administrative login is an SSH public key, or the console recovery in section K.
 
-One Netgear GS724T:
+One Netgear GS724Tv4:
 
 - IEEE 802.1Q VLANs, configured only through the web interface.
-- A revision this repository understands: GS724Tv3, GS724Tv4, or GS724Tv6. Another revision stops the procedure until its own manual is compared with section F.
-- v3: ports 1–24, up to 64 VLANs, VLAN IDs 1–4093. VLAN 1 is the default VLAN.
-- v4: ports 1–26 (24 copper and 2 SFP), up to 256 VLANs. VLANs 1, 2, and 3 are predefined and cannot be deleted. Ports start as untagged members of those three.
-- v6: ports 1–26, up to 256 VLANs. VLAN IDs 2–4093 except 4088 (Auto-VoIP) and 4089 (Auto-Video). VLAN 1, 4088, and 4089 are predefined.
-- VLAN 100 is a valid provisioning VLAN on all three revisions. It is not reserved.
+- Ports 1–26 (24 copper and 2 SFP), up to 256 VLANs. VLANs 1, 2, and 3 are predefined and cannot be deleted. Ports start as untagged members of those three.
+- VLAN 100 is a valid provisioning VLAN. It is not one of the predefined VLANs.
 - Firmware that can still open the web interface. Record the version before changing VLANs.
 
 Other requirements:
@@ -196,47 +189,37 @@ Collect the following by looking at the router and the switch, not by guessing f
 | Existing DHCP scope | Router DHCP settings. Copy the start, end, and subnet before any switch work |
 | Current LAN subnet | An address and prefix on a LAN host, confirmed against the router |
 | Netgear management IP | Section E |
-| Netgear hardware revision and firmware | Section D |
+| GS724Tv4 firmware | Section D |
 | Physical switch port mapping | Front-panel link LEDs, section G |
 | Server NIC MAC address | `ip link` on the server, or the label on the NIC. This becomes `network.management.interface_mac` |
 
 Do not infer VLAN membership from the fact that a host has an address. Untagged traffic on the management VLAN looks the same to the host as an untagged flat LAN.
 
-## D. Identifying the GS724T revision
+## D. Confirming the GS724Tv4
 
-On the switch label, read the model line. It distinguishes GS724Tv3, GS724Tv4, and GS724Tv6. The product name "GS724T" without the revision is not enough.
+On the switch label, confirm the model line reads GS724Tv4. The product name "GS724T" without the revision is not enough. If the label is a different revision, stop. This repository's menus and validator apply only to the GS724Tv4.
 
-Then open the web interface (section E) and record the firmware:
-
-- GS724Tv3 and GS724Tv4: System Information shows Model Name and Software Version.
-- GS724Tv6: System Information, Versions shows Model Name and Software Version.
-
-Write both values into `config/network.yaml` as `hardware_revision` and `firmware_version`. `hardware_revision` must be exactly `GS724Tv3`, `GS724Tv4`, or `GS724Tv6`. If the label is a different revision, stop. Do not reuse section F. Download that revision's administration or user manual from Netgear and confirm every menu name before anyone creates a VLAN.
+Then open the web interface (section E). System Information shows Model Name and Software Version. Write the Software Version into `config/network.yaml` as `firmware_version`. Leave `hardware_revision` set to `GS724Tv4`.
 
 Also record:
 
 - Management IP address.
-- Management VLAN. On these revisions it is configured under System, Management, IP Configuration. Leave it unchanged.
-- Current VLAN membership and PVID, using the pages in section F for your revision.
+- Management VLAN. It is configured under System, Management, IP Configuration. Leave it unchanged.
+- Current VLAN membership and PVID, using the pages in section F.
 
-## E. Accessing the GS724T web interface
+## E. Accessing the GS724Tv4 web interface
 
 Find the management IP from one of these sources, in order:
 
-1. The DHCP lease table on the existing router. Match the MAC address printed on the switch label. GS724Tv6 ships with its DHCP client enabled, so a factory switch on this LAN may already have a lease.
-2. NETGEAR Discovery Tool, or the Smart Control Center used with the v3 and v4 manuals. Use the tool only to display the address.
+1. The DHCP lease table on the existing router. Match the MAC address printed on the switch label.
+2. The Smart Control Center described in the GS724Tv4 administration manual. Use it only to display the address.
 3. The factory address `192.168.0.239` when the switch has never obtained a lease and is still at defaults. A host must be addressed on `192.168.0.0/24` to open that address. Do not change the router to create that path if the switch is already reachable another way.
-4. On a GS724Tv6, the user manual also describes discovery through the Windows network list and the Insight app. Use Insight only as a discovery display. Do not move the switch into Insight management.
 
 Open `http://<management-ip>/` in a browser on the management LAN. Log in with the local administrator account. This repository does not store that password.
 
 Before any VLAN change:
 
-1. Export or save the current configuration.
-   - GS724Tv3: Smart Control Center, Maintenance, Upload Configuration, or the web path Maintenance, Upload, File Upload using TFTP and file type Text Configuration.
-   - GS724Tv4: Maintenance, Upload, HTTP File Upload, file type Text Configuration.
-   - GS724Tv6: Maintenance, Export, HTTP File Export, file type Text Configuration.
-   Netgear uses "Upload" or "Export" for a copy that leaves the switch. Keep that file off the switch.
+1. Export the current configuration: Maintenance, Upload, HTTP File Upload, file type Text Configuration. On this switch, Upload means a copy that leaves the switch. Keep that file off the switch.
 2. Write down every VLAN, which ports are T, U, or blank, and every port PVID.
 3. Write down the management VLAN from System, Management, IP Configuration.
 4. Identify the router port, the MAAS server port, and the machine ports with the LED method in section G. Do not invent port numbers.
@@ -244,13 +227,13 @@ Before any VLAN change:
 
 Changing the management VLAN drops the current session. This procedure does not change it.
 
-## F. Configuring VLAN 100 on the GS724T
+## F. Configuring VLAN 100 on the GS724Tv4
 
 This section is the on-site procedure. It requires the physical switch. A passing Ubuntu VLAN interface does not mean these pages were set correctly.
 
-Use VLAN ID 100 unless the recorded revision's manual says that ID is reserved. The validator rejects VLAN 1 on every known revision, VLANs 2 and 3 on a v4, and VLANs 4088 and 4089 on a v6. If the revision is still unknown, it also rejects 1, 2, 3, 4088, and 4089 so that a placeholder cannot collide with a predefined VLAN.
+Use VLAN ID 100. The validator rejects VLANs 1, 2, and 3 because the GS724Tv4 manual predefines them and they cannot be deleted.
 
-Membership letters, on all three revisions:
+Membership letters:
 
 | Letter | Meaning |
 |---|---|
@@ -284,23 +267,13 @@ Do these steps in this order so a mistake does not remove the path you are using
 1. Confirm the backup from section E opens, and confirm the management VLAN ID.
 2. Create VLAN 100. Do not edit port membership yet. Apply. Confirm the VLAN is in the VLAN list. Confirm the web interface still loads.
 3. On the MAAS server port only, add tagged membership in VLAN 100. Leave its untagged management membership and its PVID as they are. Apply. Open the web interface again.
-4. On one machine port, remove untagged membership in the management VLAN (and, on a v4, do not leave it untagged in VLAN 2 or 3 either). Add untagged membership in VLAN 100. Set that port's PVID to 100. Apply. Confirm the web interface still loads from the management LAN.
+4. On one machine port, remove untagged membership in the management VLAN. Do not leave that port untagged in VLAN 2 or VLAN 3 either. Add untagged membership in VLAN 100. Set that port's PVID to 100. Apply. Confirm the web interface still loads from the management LAN.
 5. Repeat step 4 for each remaining machine port.
 6. Do not change the router port.
-7. Re-open VLAN Membership, Port PVID, and VLAN Status (v6) or the membership and PVID pages (v3 and v4). Compare them with the worksheet in section G.
-8. If the manual for your revision requires a separate write of the running configuration to non-volatile memory, do that step from the manual after Apply. Re-open the pages and confirm the values are still there.
+7. Re-open VLAN Membership and Port PVID Configuration. Compare them with the worksheet in section G.
+8. If the GS724Tv4 manual requires a separate write of the running configuration to non-volatile memory, do that step from the manual after Apply. Re-open the pages and confirm the values are still there.
 
-### GS724Tv3 menus
-
-From the 15 February 2012 administration manual:
-
-1. Switching, VLAN, Basic, VLAN Configuration. Create VLAN 100. Apply.
-2. Switching, VLAN, Advanced, VLAN Membership. Set T, U, or blank as in the target above. Apply.
-3. Switching, VLAN, Advanced, Port PVID Configuration. Set the machine-port PVID to 100. Leave the MAAS port PVID on the management VLAN. Apply.
-
-The v3 manual has no VLAN routing chapter. Do not look for a routing wizard.
-
-### GS724Tv4 menus
+### Menus
 
 From the 25 September 2013 administration manual:
 
@@ -308,28 +281,13 @@ From the 25 September 2013 administration manual:
 2. Switching, VLAN, Advanced, VLAN Membership. Machine ports must not remain untagged members of VLAN 1, 2, or 3 once they are untagged in VLAN 100, because a port is untagged in only one VLAN. The MAAS port stays untagged in the management VLAN and tagged in VLAN 100. Apply.
 3. Switching, VLAN, Advanced, Port PVID Configuration. Machine ports use PVID 100. The MAAS port keeps the management PVID. Apply.
 
-The v4 manual documents Routing, VLAN, VLAN Routing Wizard and VLAN Routing. Leave those pages unused.
-
-### GS724Tv6 menus
-
-From the GS724Tv6 user manual:
-
-1. Switching, VLAN, Basic, VLAN Configuration. VLAN ID 100, a name of up to 32 characters such as `provisioning` if you want one, Add, then Apply. Valid new IDs are 2–4093 excluding 4088 and 4089.
-2. Switching, VLAN, Advanced, VLAN Membership. Set T, U, or blank. Apply.
-3. Switching, VLAN, Advanced, Port PVID Configuration. Machine-port PVID 100. MAAS port PVID remains the management VLAN. Apply.
-4. Switching, VLAN, Advanced, VLAN Status. Confirm the VLAN, membership, and PVID you just set.
-
-The v6 manual documents Routing, VLAN, VLAN Routing Wizard, VLAN Routing Configuration, and Routing, Routing Table, Route Configuration. Leave those pages unused.
-
-### If the revision is not v3, v4, or v6
-
-Stop. The menus above are not a guess to try on another revision. Identify the revision, download its manual, and only then create the VLAN using the names printed in that manual.
+The manual documents Routing, VLAN, VLAN Routing Wizard and VLAN Routing. Leave those pages unused.
 
 ### Rollback
 
 If the web interface still opens, put membership and PVID back to the values you wrote down, Apply, and confirm the web interface opens again.
 
-If you need the saved file, restore it with the Maintenance procedure in the manual for your revision. The backup direction verified above is Upload or Export. The restore action is the matching download or import in that same Maintenance chapter. Use the label printed in the manual. Do not try a similarly named page from a different revision.
+If you need the saved file, restore it with the Maintenance procedure in the GS724Tv4 manual. The backup direction verified above is Upload. The restore action is the matching download in that same Maintenance chapter. Use the label printed in the manual.
 
 If the web interface is gone, use the console or factory-reset procedure in that same manual as a last resort. Factory defaults return the management address to `192.168.0.239` and remove the VLAN changes. Restore the saved configuration after you can log in again. Do not change the router DHCP service to recover the switch.
 
@@ -347,7 +305,7 @@ Copy this worksheet and replace every "User-defined" cell. The management VLAN c
 | Machine 2 | User-defined | Provisioning U | Provisioning VLAN |
 | Additional machines | User-defined | Provisioning U | Provisioning VLAN |
 
-Those port numbers then go into `network.switch.router_port`, `network.switch.maas_port`, and `network.switch.provisioning_ports`. A port may appear in only one role. v3 accepts ports 1–24. v4 and v6 accept ports 1–26.
+Those port numbers then go into `network.switch.router_port`, `network.switch.maas_port`, and `network.switch.provisioning_ports`. A port may appear in only one role. The GS724Tv4 accepts ports 1–26.
 
 `sudo maas-network-confirm-switch` prints this worksheet from the YAML and asks you to type a confirmation only after you have compared it with the VLAN Membership and Port PVID pages.
 
@@ -382,7 +340,7 @@ The committed files pass schema mode and fail install mode. That is intentional.
 | `network.routing.ubuntu_nat` | Must be `false` |
 | `network.switch.vendor` | `netgear` |
 | `network.switch.model` | `GS724T` |
-| `network.switch.hardware_revision` | `GS724Tv3`, `GS724Tv4`, or `GS724Tv6` after section D |
+| `network.switch.hardware_revision` | Must stay `GS724Tv4` |
 | `network.switch.firmware_version` | Software Version from the switch, required for install mode |
 | `network.switch.router_port` | Physical port toward the router. Left unchanged |
 | `network.switch.maas_port` | Physical port toward the server |
@@ -402,7 +360,7 @@ The committed files pass schema mode and fail install mode. That is intentional.
 | `network.provisioning.dns` | Optional DNS options for future DHCP clients |
 | `network.provisioning.acceptance.test_host` | Static address of the temporary test host, inside the provisioning subnet, outside the DHCP pool |
 
-Install mode also checks IPv4 and CIDR syntax, VLAN ID range, duplicate ports, and the revision's reserved VLANs and port limits.
+Install mode also checks IPv4 and CIDR syntax, VLAN ID range, duplicate ports, the GS724Tv4 reserved VLANs 1, 2, and 3, and ports 1–26.
 
 ### `config/deployment.yaml`
 
@@ -630,7 +588,7 @@ On the MAAS server, after you have looked at the switch pages:
 sudo maas-network-confirm-switch
 ```
 
-Type the line it prints. It looks like `CONFIRM GS724T GS724Tv4 VLAN 100`, with your revision and VLAN ID. The confirmation is stored in `/var/lib/maas-provision/gs724t-confirmation.json` and is valid for 24 hours, and only for the current configuration hash.
+Type the line it prints: `CONFIRM GS724T GS724Tv4 VLAN 100`, using the provisioning VLAN ID from the YAML if you did not keep 100. The confirmation is stored in `/var/lib/maas-provision/gs724t-confirmation.json` and is valid for 24 hours, and only for the current configuration hash.
 
 On the management-LAN observer, start a capture of at least 20 seconds while the test host is exchanging traffic. Thirty seconds is the script default:
 
@@ -749,7 +707,7 @@ The deployed machine can reach the MAAS controller on the provisioning VLAN. It 
 
 ## Q. Troubleshooting
 
-Incorrect VLAN membership. A machine port left untagged in the management VLAN, or never added to VLAN 100, stays on the existing LAN. Re-open VLAN Membership for your revision and compare it with section G. On a v4, also check that the machine port is not still untagged in VLAN 2 or 3.
+Incorrect VLAN membership. A machine port left untagged in the management VLAN, or never added to VLAN 100, stays on the existing LAN. Re-open Switching, VLAN, Advanced, VLAN Membership and compare it with section G. Also check that the machine port is not still untagged in VLAN 2 or 3.
 
 Incorrect PVID. The port can be a member of VLAN 100 and still classify incoming untagged frames into the management VLAN. Set the machine-port PVID to the provisioning VLAN ID. Creating the VLAN does not set PVID.
 

@@ -14,8 +14,8 @@ network:
   switch:
     vendor: netgear
     model: GS724T
-    # Set this to GS724Tv3, GS724Tv4, or GS724Tv6 after reading the switch.
-    hardware_revision: null
+    # This deployment supports only the GS724Tv4.
+    hardware_revision: GS724Tv4
     firmware_version: null
     # Physical port numbers taken from the switch web interface. Do not guess.
     router_port: null
