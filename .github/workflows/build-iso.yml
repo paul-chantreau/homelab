@@ -17,7 +17,18 @@ jobs:
       - name: Install test tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y ansible ansible-lint python3-jsonschema python3-pytest python3-yaml
+          sudo apt-get install -y \
+            ansible \
+            ansible-lint \
+            python3-jsonschema \
+            python3-pytest \
+            python3-yaml \
+            xorriso \
+            mtools \
+            grub-common \
+            grub-pc-bin \
+            grub-efi-amd64-bin \
+            qemu-system-x86
 
       - name: Validate the committed configuration schema
         run: python3 scripts/validate-config.py --mode schema --network config/network.yaml --deployment config/deployment.yaml
