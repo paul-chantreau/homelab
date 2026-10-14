@@ -28,7 +28,7 @@
           "properties": {
             "vendor": {"const": "netgear"},
             "model": {"const": "GS724T"},
-            "hardware_revision": {"type": ["string", "null"]},
+            "hardware_revision": {"const": "GS724Tv4"},
             "firmware_version": {"type": ["string", "null"]},
             "router_port": {"type": ["integer", "null"]},
             "maas_port": {"type": ["integer", "null"]},

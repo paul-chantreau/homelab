@@ -88,7 +88,7 @@ def summary(report: dict[str, Any]) -> str:
             "",
             "Still collect these manually:",
             "  router address and existing DHCP scope",
-            "  Netgear management IP, hardware revision, and firmware",
+            "  Netgear GS724Tv4 management IP and firmware",
             "  physical switch port for the router, the server, and each machine",
             "",
             json.dumps({"interfaces": len(report["interfaces"]), "routes": len(report["routes"])}),

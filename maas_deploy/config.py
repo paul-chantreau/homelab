@@ -20,16 +20,11 @@ import yaml
 SCHEMA_MODE = "schema"
 INSTALL_MODE = "install"
 
-KNOWN_REVISIONS = ("GS724Tv3", "GS724Tv4", "GS724Tv6")
-# Copper ports, plus the two dedicated SFP ports on v4 and v6. v3 is 24 copper.
-PORT_MAX = {"GS724Tv3": 24, "GS724Tv4": 26, "GS724Tv6": 26}
-# Provisioning must not reuse a VLAN the matching manual predefines.
-RESERVED_PROVISIONING_VLANS = {
-    "GS724Tv3": {1},
-    "GS724Tv4": {1, 2, 3},
-    "GS724Tv6": {1, 4088, 4089},
-}
-UNKNOWN_REVISION_RESERVED = {1, 2, 3, 4088, 4089}
+# This deployment supports only the GS724Tv4. Ports 1–26 cover 24 copper ports and 2 SFP ports.
+HARDWARE_REVISION = "GS724Tv4"
+PORT_MAX = 26
+# The v4 manual predefines VLAN 1 (default), VLAN 2 (voice), and VLAN 3 (auto-video).
+RESERVED_PROVISIONING_VLANS = {1, 2, 3}
 VLAN_MAX = 4093
 MAAS_CHANNEL = "3.7/stable"
 MAAS_MODE = "region+rack"
@@ -199,24 +194,16 @@ def _validate_network(network: Any, mode: str, errors: list[str]) -> None:
     if str(switch.get("model", "")).upper() != "GS724T":
         errors.append("network.switch.model must be 'GS724T'")
     revision = switch.get("hardware_revision")
-    if mode == INSTALL_MODE and revision in (None, ""):
-        errors.append(
-            "network.switch.hardware_revision is required. Identify GS724Tv3, "
-            "GS724Tv4, or GS724Tv6 before building an installation ISO"
-        )
-    if revision not in (None, "") and revision not in KNOWN_REVISIONS:
-        errors.append(
-            "network.switch.hardware_revision must be GS724Tv3, GS724Tv4, or GS724Tv6"
-        )
+    if revision != HARDWARE_REVISION:
+        errors.append("network.switch.hardware_revision must be 'GS724Tv4'")
     firmware = switch.get("firmware_version")
     if mode == INSTALL_MODE and firmware in (None, ""):
         errors.append("network.switch.firmware_version is required before installation")
     elif firmware not in (None, "") and not isinstance(firmware, str):
         errors.append("network.switch.firmware_version must be a string")
 
-    port_max = PORT_MAX.get(revision, 26) if isinstance(revision, str) else 26
-    router = _port(switch.get("router_port"), "network.switch.router_port", port_max, mode, errors)
-    maas = _port(switch.get("maas_port"), "network.switch.maas_port", port_max, mode, errors)
+    router = _port(switch.get("router_port"), "network.switch.router_port", PORT_MAX, mode, errors)
+    maas = _port(switch.get("maas_port"), "network.switch.maas_port", PORT_MAX, mode, errors)
     provisioning_ports = switch.get("provisioning_ports")
     parsed_ports: list[int] = []
     if not isinstance(provisioning_ports, list):
@@ -228,7 +215,7 @@ def _validate_network(network: Any, mode: str, errors: list[str]) -> None:
             parsed = _port(
                 port,
                 f"network.switch.provisioning_ports[{index}]",
-                port_max,
+                PORT_MAX,
                 INSTALL_MODE,
                 errors,
             )
@@ -268,7 +255,7 @@ def _validate_network(network: Any, mode: str, errors: list[str]) -> None:
     )
     if management_vlan is not None and provisioning_vlan is not None and management_vlan == provisioning_vlan:
         errors.append("management and provisioning VLAN IDs must be different")
-    _reserved_vlan(revision, provisioning_vlan, errors)
+    _reserved_vlan(provisioning_vlan, errors)
     provisioning_net = _cidr(
         provisioning.get("subnet"), "network.provisioning.subnet", mode, errors, host=False
     )
@@ -460,7 +447,7 @@ def _port(value: Any, location: str, port_max: int, mode: str, errors: list[str]
         errors.append(f"{location} must be an integer port number")
         return None
     if not 1 <= value <= port_max:
-        errors.append(f"{location} must be a GS724T port from 1 to {port_max}")
+        errors.append(f"{location} must be a GS724Tv4 port from 1 to {port_max}")
         return None
     return value
 
@@ -476,20 +463,12 @@ def _vlan(value: Any, location: str, errors: list[str], allow_one: bool) -> int 
     return value
 
 
-def _reserved_vlan(revision: Any, vlan_id: int | None, errors: list[str]) -> None:
+def _reserved_vlan(vlan_id: int | None, errors: list[str]) -> None:
     if vlan_id is None:
         return
-    if isinstance(revision, str) and revision in RESERVED_PROVISIONING_VLANS:
-        reserved = RESERVED_PROVISIONING_VLANS[revision]
-        if vlan_id in reserved:
-            errors.append(
-                f"VLAN {vlan_id} is predefined on {revision} and cannot be the provisioning VLAN"
-            )
-        return
-    if revision in (None, "") and vlan_id in UNKNOWN_REVISION_RESERVED:
+    if vlan_id in RESERVED_PROVISIONING_VLANS:
         errors.append(
-            f"VLAN {vlan_id} is reserved on at least one GS724T revision. "
-            "Set hardware_revision or choose a VLAN such as 100"
+            f"VLAN {vlan_id} is predefined on GS724Tv4 and cannot be the provisioning VLAN"
         )
 
 
