@@ -38,10 +38,18 @@ jobs:
 
       - name: Check Ansible syntax
         working-directory: ansible
-        run: ansible-playbook --syntax-check install.yml
+        run: |
+          # The runner image ships a newer Ansible on PATH. Lint imports the
+          # apt module, so both commands must use the apt CLI.
+          export PATH="/usr/bin:${PATH}"
+          ansible-playbook --version
+          ansible-playbook --syntax-check install.yml
 
       - name: Lint Ansible
-        run: ansible-lint ansible/install.yml
+        run: |
+          export PATH="/usr/bin:${PATH}"
+          ansible --version
+          ansible-lint ansible/install.yml
 
   iso:
     needs: validate
