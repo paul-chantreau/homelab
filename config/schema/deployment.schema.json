@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/paul-chantreau/homelab/config/schema/deployment.schema.json",
+  "title": "MAAS deployment configuration",
+  "type": "object",
+  "required": ["deployment"],
+  "additionalProperties": false,
+  "properties": {
+    "deployment": {
+      "type": "object",
+      "required": ["hostname", "timezone", "locale", "keyboard_layout", "admin_user", "ssh_authorized_keys", "disk", "ubuntu", "maas", "postgresql", "backup"],
+      "additionalProperties": false,
+      "properties": {
+        "hostname": {"type": "string"},
+        "timezone": {"type": "string"},
+        "locale": {"type": "string"},
+        "keyboard_layout": {"type": "string"},
+        "admin_user": {"type": "string"},
+        "ssh_authorized_keys": {"type": "array", "items": {"type": "string"}},
+        "disk": {
+          "type": "object",
+          "required": ["serial", "wwn", "by_id", "model", "confirm_erase"],
+          "additionalProperties": false,
+          "properties": {
+            "serial": {"type": ["string", "null"]},
+            "wwn": {"type": ["string", "null"]},
+            "by_id": {"type": ["string", "null"]},
+            "model": {"type": ["string", "null"]},
+            "confirm_erase": {"type": "boolean"}
+          }
+        },
+        "ubuntu": {
+          "type": "object",
+          "required": ["release", "codename", "iso_name", "sha256", "base_url"],
+          "additionalProperties": false,
+          "properties": {
+            "release": {"const": "24.04.5"},
+            "codename": {"const": "noble"},
+            "iso_name": {"const": "ubuntu-24.04.5-live-server-amd64.iso"},
+            "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "base_url": {"type": "string"}
+          }
+        },
+        "maas": {
+          "type": "object",
+          "required": ["channel", "mode", "admin_username", "admin_email", "image_release"],
+          "additionalProperties": false,
+          "properties": {
+            "channel": {"const": "3.7/stable"},
+            "mode": {"const": "region+rack"},
+            "admin_username": {"type": "string"},
+            "admin_email": {"type": "string"},
+            "image_release": {"const": "noble"}
+          }
+        },
+        "postgresql": {
+          "type": "object",
+          "required": ["major", "database", "user"],
+          "additionalProperties": false,
+          "properties": {
+            "major": {"const": 16},
+            "database": {"type": "string"},
+            "user": {"type": "string"}
+          }
+        },
+        "backup": {
+          "type": "object",
+          "required": ["directory", "offhost_target", "retain"],
+          "additionalProperties": false,
+          "properties": {
+            "directory": {"type": "string"},
+            "offhost_target": {"type": ["string", "null"]},
+            "retain": {"type": "integer", "minimum": 1, "maximum": 365}
+          }
+        }
+      }
+    }
+  }
+}

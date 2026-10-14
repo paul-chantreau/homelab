@@ -1,0 +1,16 @@
+[Unit]
+Description=Local MAAS provisioning
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=!/var/lib/maas-provision/complete
+
+[Service]
+Type=oneshot
+ExecStart=/opt/maas-deploy/scripts/first-boot.sh
+RemainAfterExit=yes
+TimeoutStartSec=infinity
+User=root
+Group=root
+
+[Install]
+WantedBy=multi-user.target

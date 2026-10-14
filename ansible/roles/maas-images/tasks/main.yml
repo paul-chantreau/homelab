@@ -1,0 +1,11 @@
+---
+- name: Synchronize the Ubuntu Noble image
+  ansible.builtin.command:
+    argv: [python3, -m, maas_deploy, images]
+  environment:
+    PYTHONPATH: "{{ playbook_dir }}/.."
+    MAAS_DEPLOY_ROOT: "{{ playbook_dir }}/.."
+    MAAS_STATE_DIR: /var/lib/maas-provision
+  register: image_result
+  changed_when: image_result.stdout == "synced"
+  no_log: true

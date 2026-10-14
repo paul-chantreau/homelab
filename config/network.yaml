@@ -1,0 +1,51 @@
+# Canonical network configuration.
+# Null values are unknown until the physical network has been inspected.
+# Do not invent addresses. Do not store passwords in this file.
+# Installation is refused until validate-config.py --mode install succeeds.
+network:
+  # vlan is the only implemented mode. shared-lan is intentionally rejected.
+  mode: vlan
+
+  routing:
+    # Isolated provisioning VLAN. Do not enable the other documented options here.
+    decision: isolated
+    ubuntu_nat: false
+
+  switch:
+    vendor: netgear
+    model: GS724T
+    # Set this to GS724Tv3, GS724Tv4, or GS724Tv6 after reading the switch.
+    hardware_revision: null
+    firmware_version: null
+    # Physical port numbers taken from the switch web interface. Do not guess.
+    router_port: null
+    maas_port: null
+    provisioning_ports: []
+
+  management:
+    # MAC address of the server's single physical NIC.
+    interface_mac: null
+    # Host address in CIDR form, for example 192.0.2.10/24 after you choose it.
+    address: null
+    gateway: null
+    dns: []
+    # PVID of the existing management LAN. Do not change the switch management VLAN.
+    vlan_id: 1
+
+  provisioning:
+    # VLAN 100 is a placeholder. Keep it unless the revision's manual reserves it.
+    vlan_id: 100
+    subnet: null
+    # Address of this server on the provisioning VLAN. Outside the DHCP pool.
+    controller_address: null
+    dhcp:
+      # DHCP stays disabled until maas-network-activate is confirmed.
+      activate_automatically: false
+      range_start: null
+      range_end: null
+    # Null keeps the VLAN isolated. A gateway here is advertised only to future DHCP clients.
+    gateway: null
+    dns: []
+    acceptance:
+      # Static address of the temporary host used to test a provisioning port.
+      test_host: null

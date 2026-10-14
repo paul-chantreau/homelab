@@ -1,0 +1,8 @@
+[Unit]
+Description=MAAS controller health check
+
+[Service]
+Type=oneshot
+ExecStart=/opt/maas-deploy/scripts/healthcheck.sh
+User=root
+Group=root

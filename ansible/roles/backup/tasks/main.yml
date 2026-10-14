@@ -1,0 +1,18 @@
+---
+- name: Install backup units
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../systemd/{{ item }}"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - maas-backup.service
+    - maas-backup.timer
+
+- name: Enable the daily backup timer
+  ansible.builtin.systemd:
+    name: maas-backup.timer
+    enabled: true
+    state: started
+    daemon_reload: true

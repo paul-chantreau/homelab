@@ -1,0 +1,23 @@
+---
+- name: Provision the local MAAS controller
+  hosts: localhost
+  connection: local
+  become: true
+  gather_facts: true
+  vars_files:
+    - "{{ playbook_dir }}/../config/network.yaml"
+    - "{{ playbook_dir }}/../config/deployment.yaml"
+  environment:
+    PYTHONPATH: "{{ playbook_dir }}/.."
+    MAAS_DEPLOY_ROOT: "{{ playbook_dir }}/.."
+    MAAS_STATE_DIR: /var/lib/maas-provision
+  roles:
+    - system
+    - network
+    - security
+    - postgresql
+    - maas
+    - maas-network
+    - maas-images
+    - backup
+    - healthcheck

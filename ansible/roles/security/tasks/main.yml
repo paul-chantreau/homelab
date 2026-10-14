@@ -1,0 +1,14 @@
+---
+- name: Disable SSH password authentication
+  ansible.builtin.copy:
+    dest: /etc/ssh/sshd_config.d/99-maas-provision.conf
+    mode: "0644"
+    content: |
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      PermitRootLogin no
+  notify: Restart ssh
+
+- name: Validate the SSH configuration
+  ansible.builtin.command: sshd -t
+  changed_when: false

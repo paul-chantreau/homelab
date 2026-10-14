@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/paul-chantreau/homelab/config/schema/network.schema.json",
+  "title": "MAAS network configuration",
+  "type": "object",
+  "required": ["network"],
+  "additionalProperties": false,
+  "properties": {
+    "network": {
+      "type": "object",
+      "required": ["mode", "routing", "switch", "management", "provisioning"],
+      "additionalProperties": false,
+      "properties": {
+        "mode": {"const": "vlan"},
+        "routing": {
+          "type": "object",
+          "required": ["decision", "ubuntu_nat"],
+          "additionalProperties": false,
+          "properties": {
+            "decision": {"const": "isolated"},
+            "ubuntu_nat": {"const": false}
+          }
+        },
+        "switch": {
+          "type": "object",
+          "required": ["vendor", "model", "hardware_revision", "firmware_version", "router_port", "maas_port", "provisioning_ports"],
+          "additionalProperties": false,
+          "properties": {
+            "vendor": {"const": "netgear"},
+            "model": {"const": "GS724T"},
+            "hardware_revision": {"type": ["string", "null"]},
+            "firmware_version": {"type": ["string", "null"]},
+            "router_port": {"type": ["integer", "null"]},
+            "maas_port": {"type": ["integer", "null"]},
+            "provisioning_ports": {"type": "array", "items": {"type": "integer"}}
+          }
+        },
+        "management": {
+          "type": "object",
+          "required": ["interface_mac", "address", "gateway", "dns", "vlan_id"],
+          "additionalProperties": false,
+          "properties": {
+            "interface_mac": {"type": ["string", "null"]},
+            "address": {"type": ["string", "null"]},
+            "gateway": {"type": ["string", "null"]},
+            "dns": {"type": "array", "items": {"type": "string"}},
+            "vlan_id": {"type": "integer"}
+          }
+        },
+        "provisioning": {
+          "type": "object",
+          "required": ["vlan_id", "subnet", "controller_address", "dhcp", "gateway", "dns", "acceptance"],
+          "additionalProperties": false,
+          "properties": {
+            "vlan_id": {"type": "integer"},
+            "subnet": {"type": ["string", "null"]},
+            "controller_address": {"type": ["string", "null"]},
+            "dhcp": {
+              "type": "object",
+              "required": ["activate_automatically", "range_start", "range_end"],
+              "additionalProperties": false,
+              "properties": {
+                "activate_automatically": {"const": false},
+                "range_start": {"type": ["string", "null"]},
+                "range_end": {"type": ["string", "null"]}
+              }
+            },
+            "gateway": {"type": ["string", "null"]},
+            "dns": {"type": "array", "items": {"type": "string"}},
+            "acceptance": {
+              "type": "object",
+              "required": ["test_host"],
+              "additionalProperties": false,
+              "properties": {"test_host": {"type": ["string", "null"]}}
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,68 @@
+#cloud-config
+autoinstall:
+  version: 1
+  refresh-installer:
+    update: false
+  locale: {{ locale | tojson }}
+  keyboard:
+    layout: {{ keyboard_layout | tojson }}
+  timezone: {{ timezone | tojson }}
+  identity:
+    hostname: {{ hostname | tojson }}
+    username: {{ admin_user | tojson }}
+    password: {{ password_hash | tojson }}
+  ssh:
+    install-server: true
+    allow-pw: false
+    authorized-keys:
+{% for key in ssh_keys %}
+      - {{ key | tojson }}
+{% else %}
+      []
+{% endfor %}
+  storage:
+    layout:
+      name: direct
+      match:
+{% for key, value in disk_match.items() %}
+        {{ key }}: {{ value | tojson }}
+{% endfor %}
+{% if install_ready %}
+  network:
+{{ network_yaml }}
+{% else %}
+  network:
+    version: 2
+    ethernets: {}
+{% endif %}
+  packages:
+    - ansible
+    - curl
+    - iputils-arping
+    - iputils-ping
+    - jq
+    - postgresql
+    - postgresql-client
+    - python3-yaml
+    - tcpdump
+    - vlan
+  early-commands:
+    - python3 /cdrom/maas-deploy/scripts/preinstall-check.py --network /cdrom/maas-deploy/config/network.yaml --deployment /cdrom/maas-deploy/config/deployment.yaml
+  late-commands:
+    - mkdir -p /target/opt/maas-deploy /target/var/lib/maas-provision /target/var/log/maas-provision /target/etc/maas-provision /target/usr/local/sbin /target/etc/systemd/system
+    - cp -a /cdrom/maas-deploy/. /target/opt/maas-deploy/
+    - install -m 0644 /cdrom/maas-deploy/systemd/maas-firstboot.service /target/etc/systemd/system/maas-firstboot.service
+    - ln -sfn /opt/maas-deploy/scripts/activate-dhcp.sh /target/usr/local/sbin/maas-network-activate
+    - ln -sfn /opt/maas-deploy/scripts/deactivate-dhcp.sh /target/usr/local/sbin/maas-network-deactivate
+    - ln -sfn /opt/maas-deploy/scripts/validate-provisioning-network.sh /target/usr/local/sbin/maas-network-validate
+    - ln -sfn /opt/maas-deploy/scripts/confirm-switch.sh /target/usr/local/sbin/maas-network-confirm-switch
+    - ln -sfn /opt/maas-deploy/scripts/healthcheck.sh /target/usr/local/sbin/maas-healthcheck
+    - ln -sfn /opt/maas-deploy/scripts/backup-maas.sh /target/usr/local/sbin/maas-backup
+    - ln -sfn /opt/maas-deploy/scripts/restore-maas.sh /target/usr/local/sbin/maas-restore
+    - curtin in-target -- passwd -l {{ admin_user }}
+    - curtin in-target -- systemctl enable maas-firstboot.service
+  user-data:
+    runcmd:
+      - install -d -m 0750 -o root -g root /var/log/maas-provision /var/lib/maas-provision
+  shutdown: reboot
+  updates: security
