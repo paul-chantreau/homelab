@@ -17,7 +17,7 @@ else:
     sys.path.insert(0, "/cdrom/maas-deploy")
 
 from maas_deploy.config import INSTALL_MODE, ConfigError, load_config, validate  # noqa: E402
-from maas_deploy.diskmatch import describe, matching_disks  # noqa: E402
+from maas_deploy.diskmatch import describe, matching_disks, update_installer_serial  # noqa: E402
 
 
 def _disks() -> list[dict]:
@@ -57,6 +57,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--network", type=Path, required=True)
     parser.add_argument("--deployment", type=Path, required=True)
+    parser.add_argument("--autoinstall", type=Path)
     args = parser.parse_args()
     try:
         config = load_config(args.network, args.deployment)
@@ -74,6 +75,12 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+    if args.autoinstall:
+        try:
+            update_installer_serial(args.autoinstall, matches[0], config.deployment["disk"])
+        except (ValueError, OSError, subprocess.CalledProcessError):
+            print("Refusing to install: cannot resolve the verified disk for Subiquity. No disk was erased.", file=sys.stderr)
+            return 1
     print(f"The installer will erase this disk: {describe(matches[0])}")
     return 0
 

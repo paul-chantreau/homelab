@@ -398,6 +398,8 @@ lsblk -d -o NAME,MODEL,SERIAL,WWN,SIZE,TYPE
 ls -l /dev/disk/by-id/
 ```
 
+For serial-based selection, the early-command check verifies the hardware serial from `lsblk`, then rewrites only the installer's serial selector in `/autoinstall.yaml` to the verified device's udev `ID_SERIAL`. NVMe devices can expose a short hardware serial and a longer model/serial/namespace identifier to Subiquity. Keep the short hardware serial in `DISK_SERIAL`; do not replace it with the longer udev identifier. Missing or inconsistent identity information stops installation.
+
 The early-command check prints the one disk it is about to erase. If the serial, WWN, or by-id path matches zero disks or more than one disk, the installer stops and erases nothing. An incomplete configuration is rendered with the impossible serial `REFUSING-INCOMPLETE-CONFIG-NO-DISK-MATCH`, so a skipped check still cannot match a real disk.
 
 ### What install mode generates

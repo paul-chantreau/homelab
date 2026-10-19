@@ -48,7 +48,7 @@ autoinstall:
     - tcpdump
     - vlan
   early-commands:
-    - python3 /cdrom/maas-deploy/scripts/preinstall-check.py --network /cdrom/maas-deploy/config/network.yaml --deployment /cdrom/maas-deploy/config/deployment.yaml
+    - python3 /cdrom/maas-deploy/scripts/preinstall-check.py --network /cdrom/maas-deploy/config/network.yaml --deployment /cdrom/maas-deploy/config/deployment.yaml --autoinstall /autoinstall.yaml
   late-commands:
     - mkdir -p /target/opt/maas-deploy /target/var/lib/maas-provision /target/var/log/maas-provision /target/etc/maas-provision /target/usr/local/sbin /target/etc/systemd/system
     - cp -a /cdrom/maas-deploy/. /target/opt/maas-deploy/

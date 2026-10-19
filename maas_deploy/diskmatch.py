@@ -7,6 +7,36 @@ accepted as selectors.
 from __future__ import annotations
 
 from typing import Any
+from pathlib import Path
+import subprocess
+
+import yaml
+
+
+def update_installer_serial(path: Path, device: dict[str, Any], spec: dict[str, Any]) -> None:
+    """Translate a verified lsblk serial to Subiquity's udev ID_SERIAL.
+
+    Called only after the configured identity matches exactly one physical disk.
+    The canonical deployment configuration retains the hardware's short serial.
+    """
+    if not spec.get("serial"):
+        return
+    name = str(device["name"])
+    result = subprocess.run(
+        ["udevadm", "info", "--query=property", f"--name=/dev/{name}"],
+        check=True, capture_output=True, text=True,
+    )
+    properties = dict(line.split("=", 1) for line in result.stdout.splitlines() if "=" in line)
+    serial = properties.get("ID_SERIAL", "").strip()
+    short = properties.get("ID_SERIAL_SHORT", "").strip()
+    if not serial or (short and _norm(short) != _norm(spec["serial"])):
+        raise ValueError("Cannot resolve the verified disk's installer serial; refusing installation")
+    document = yaml.safe_load(path.read_text(encoding="utf-8"))
+    match = document["autoinstall"]["storage"]["layout"]["match"]
+    if match.get("serial") != str(spec["serial"]):
+        raise ValueError("Installer disk selector differs from verified configuration; refusing installation")
+    match["serial"] = serial
+    path.write_text(yaml.safe_dump(document, sort_keys=False), encoding="utf-8")
 
 
 def matching_disks(devices: list[dict[str, Any]], spec: dict[str, Any]) -> list[dict[str, Any]]:
