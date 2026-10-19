@@ -64,6 +64,28 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y python3-jinja2 python3-yaml xorriso curl ca-certificates
 
+      - name: Configure the SSH public key
+        env:
+          SSH_PUBLIC_KEY: ${{ secrets.SSH_PUBLIC_KEY }}
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          import yaml
+
+          from maas_deploy.config import SCHEMA_MODE, load_config, validate
+
+          keys = [line.strip() for line in os.environ["SSH_PUBLIC_KEY"].splitlines() if line.strip()]
+          if not keys:
+              raise SystemExit("Set the SSH_PUBLIC_KEY repository Actions secret to your SSH public key.")
+          path = Path("config/deployment.yaml")
+          document = yaml.safe_load(path.read_text(encoding="utf-8"))
+          document["deployment"]["ssh_authorized_keys"] = keys
+          path.write_text(yaml.safe_dump(document, sort_keys=False), encoding="utf-8")
+          validate(load_config(Path("config/network.yaml"), path), SCHEMA_MODE)
+          PY
+
       - name: Build the autoinstall ISO
         run: |
           chmod +x scripts/*.sh

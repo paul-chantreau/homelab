@@ -433,7 +433,9 @@ Use your own subnets. `192.0.2.0/24` and `198.51.100.0/24` are documentation ran
 
 ## I. Building the ISO with GitHub Actions
 
-The workflow is `.github/workflows/build-iso.yml`. It requests `contents: read` and uses pinned `actions/checkout` and `actions/upload-artifact` commits. It does not use GitHub Secrets.
+The workflow is `.github/workflows/build-iso.yml`. It requests `contents: read` and uses pinned `actions/checkout` and `actions/upload-artifact` commits. The manual ISO build reads the `SSH_PUBLIC_KEY` repository Actions secret. The MAAS administrator password is still generated on the installed server; it is never supplied by GitHub.
+
+Before a manual build, open the repository's Settings, Secrets and variables, Actions, then create a repository secret named `SSH_PUBLIC_KEY`. Paste your SSH **public** key (the contents of your `.pub` file), never your private key. Multiple public keys are supported, one per line. The build replaces `deployment.ssh_authorized_keys` only in the runner's checkout before generating the ISO; it does not commit that change. A missing or malformed public key stops the build. The public keys are included in the ISO so SSH login can work after installation.
 
 On a pull request, the `validate` job checks out the branch, installs Ansible and pytest, runs schema validation, `pytest`, `ansible-playbook --syntax-check`, and `ansible-lint`.
 
@@ -462,7 +464,7 @@ scripts/build-iso.sh
 sha256sum -c build/SHA256SUMS
 ```
 
-The local build needs `xorriso`, `curl`, and the Python packages listed in `requirements-dev.txt` (`PyYAML`, `jsonschema`, `Jinja2`).
+The local build needs `xorriso`, `curl`, and the Python packages listed in `requirements-dev.txt` (`PyYAML`, `jsonschema`, `Jinja2`). For a local build, fill `deployment.ssh_authorized_keys` in `config/deployment.yaml`; local builds do not read GitHub Secrets.
 
 ## J. Writing the USB installer
 
