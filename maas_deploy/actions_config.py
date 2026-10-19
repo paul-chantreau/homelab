@@ -41,6 +41,10 @@ def resolve(base: LoadedConfig, variables: dict[str, Any], secrets: dict[str, An
         source = spec.get('source', 'variable')
         values = secrets if source == 'secret' else variables
         raw = values.get(name, '')
+        # GitHub expressions can serialize an unset secret as JSON null.
+        # Treat it as absent so optional disk alternatives remain optional.
+        if raw is None:
+            raw = ''
         if not isinstance(raw, str):
             errors.append(f'{name}: expected a string variable')
             continue

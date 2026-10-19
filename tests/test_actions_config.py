@@ -56,7 +56,7 @@ def test_defaults_are_applied_and_rendered(committed, variables):
 
 
 @pytest.mark.parametrize('name', [name for name, spec in catalog().items() if spec.get('required')])
-@pytest.mark.parametrize('missing', ['', '   ', '__REQUIRED__'])
+@pytest.mark.parametrize('missing', [None, '', '   ', '__REQUIRED__'])
 def test_every_required_variable_is_checked(committed, variables, name, missing):
     variables[name] = missing
     with pytest.raises(ConfigError, match=name):
@@ -64,11 +64,19 @@ def test_every_required_variable_is_checked(committed, variables, name, missing)
 
 
 @pytest.mark.parametrize('identifier', ['DISK_SERIAL', 'DISK_WWN', 'DISK_BY_ID'])
-def test_each_disk_identifier_is_sufficient(committed, variables, identifier):
+@pytest.mark.parametrize('unused', [None, '', '__REQUIRED__'])
+def test_each_disk_identifier_is_sufficient(committed, variables, identifier, unused):
     for name in ['DISK_SERIAL', 'DISK_WWN', 'DISK_BY_ID']:
-        variables.pop(name, None)
+        variables[name] = unused
     variables[identifier] = '/dev/disk/by-id/wwn-example' if identifier == 'DISK_BY_ID' else 'EXAMPLE123'
     resolve(committed, variables)
+
+
+def test_all_disk_identifiers_absent_are_rejected(committed, variables):
+    for name in ['DISK_SERIAL', 'DISK_WWN', 'DISK_BY_ID']:
+        variables[name] = None
+    with pytest.raises(ConfigError, match='At least one Secret DISK_SERIAL, DISK_WWN, DISK_BY_ID is required'):
+        resolve(committed, variables)
 
 
 def test_disk_placeholder_does_not_authorize_installation(committed, variables):
