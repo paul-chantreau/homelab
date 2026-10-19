@@ -31,9 +31,19 @@ def update_installer_serial(path: Path, device: dict[str, Any], spec: dict[str, 
     short = properties.get("ID_SERIAL_SHORT", "").strip()
     if not serial or (short and _norm(short) != _norm(spec["serial"])):
         raise ValueError("Cannot resolve the verified disk's installer serial; refusing installation")
-    document = yaml.safe_load(path.read_text(encoding="utf-8"))
-    match = document["autoinstall"]["storage"]["layout"]["match"]
-    if match.get("serial") != str(spec["serial"]):
+    try:
+        document = yaml.safe_load(path.read_text(encoding="utf-8"))
+        # Subiquity extracts cloud-config's autoinstall section into a flat
+        # /autoinstall.yaml before running early-commands. Preserve either form.
+        if not isinstance(document, dict):
+            raise ValueError("Installer configuration must be a mapping")
+        config = document.get("autoinstall", document)
+        match = config["storage"]["layout"]["match"]
+        if not isinstance(match, dict):
+            raise ValueError("Installer disk selector must be a mapping")
+    except (KeyError, TypeError, yaml.YAMLError) as error:
+        raise ValueError("Invalid installer storage configuration; refusing installation") from error
+    if match.get("serial") not in {str(spec["serial"]), serial}:
         raise ValueError("Installer disk selector differs from verified configuration; refusing installation")
     match["serial"] = serial
     path.write_text(yaml.safe_dump(document, sort_keys=False), encoding="utf-8")
