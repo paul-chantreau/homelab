@@ -1,0 +1,157 @@
+{
+  "SSH_PUBLIC_KEY": {
+    "path": "deployment.ssh_authorized_keys",
+    "type": "keys",
+    "required": true
+  },
+  "SWITCH_FIRMWARE_VERSION": {
+    "path": "network.switch.firmware_version",
+    "type": "string",
+    "required": true
+  },
+  "SWITCH_ROUTER_PORT": {
+    "path": "network.switch.router_port",
+    "type": "integer",
+    "required": true
+  },
+  "SWITCH_MAAS_PORT": {
+    "path": "network.switch.maas_port",
+    "type": "integer",
+    "required": true
+  },
+  "SWITCH_PROVISIONING_PORTS": {
+    "path": "network.switch.provisioning_ports",
+    "type": "integer-list",
+    "required": true
+  },
+  "MANAGEMENT_INTERFACE_MAC": {
+    "path": "network.management.interface_mac",
+    "type": "string",
+    "required": true
+  },
+  "MANAGEMENT_ADDRESS": {
+    "path": "network.management.address",
+    "type": "string",
+    "required": true
+  },
+  "MANAGEMENT_GATEWAY": {
+    "path": "network.management.gateway",
+    "type": "string",
+    "required": true
+  },
+  "MANAGEMENT_DNS": {
+    "path": "network.management.dns",
+    "type": "string-list",
+    "required": true
+  },
+  "MANAGEMENT_VLAN_ID": {
+    "path": "network.management.vlan_id",
+    "type": "integer",
+    "required": true
+  },
+  "PROVISIONING_VLAN_ID": {
+    "path": "network.provisioning.vlan_id",
+    "type": "integer",
+    "required": true
+  },
+  "PROVISIONING_SUBNET": {
+    "path": "network.provisioning.subnet",
+    "type": "string",
+    "required": true
+  },
+  "PROVISIONING_CONTROLLER_ADDRESS": {
+    "path": "network.provisioning.controller_address",
+    "type": "string",
+    "required": true
+  },
+  "PROVISIONING_DHCP_START": {
+    "path": "network.provisioning.dhcp.range_start",
+    "type": "string",
+    "required": true
+  },
+  "PROVISIONING_DHCP_END": {
+    "path": "network.provisioning.dhcp.range_end",
+    "type": "string",
+    "required": true
+  },
+  "PROVISIONING_TEST_HOST": {
+    "path": "network.provisioning.acceptance.test_host",
+    "type": "string",
+    "required": true
+  },
+  "DISK_SERIAL": {
+    "path": "deployment.disk.serial",
+    "type": "string",
+    "group": "disk"
+  },
+  "DISK_WWN": {
+    "path": "deployment.disk.wwn",
+    "type": "string",
+    "group": "disk"
+  },
+  "DISK_BY_ID": {
+    "path": "deployment.disk.by_id",
+    "type": "string",
+    "group": "disk"
+  },
+  "HOSTNAME": {
+    "path": "deployment.hostname",
+    "type": "string",
+    "default": "maas-controller"
+  },
+  "TIMEZONE": {
+    "path": "deployment.timezone",
+    "type": "string",
+    "default": "Europe/Paris"
+  },
+  "LOCALE": {
+    "path": "deployment.locale",
+    "type": "string",
+    "default": "en_US.UTF-8"
+  },
+  "KEYBOARD_LAYOUT": {
+    "path": "deployment.keyboard_layout",
+    "type": "string",
+    "default": "fr"
+  },
+  "KEYBOARD_VARIANT": {
+    "path": "deployment.keyboard_variant",
+    "type": "string",
+    "default": "legacy"
+  },
+  "ADMIN_USER": {
+    "path": "deployment.admin_user",
+    "type": "string",
+    "default": "maasadmin"
+  },
+  "MAAS_ADMIN_USERNAME": {
+    "path": "deployment.maas.admin_username",
+    "type": "string",
+    "default": "admin"
+  },
+  "MAAS_ADMIN_EMAIL": {
+    "path": "deployment.maas.admin_email",
+    "type": "string",
+    "default": "admin@maas.local"
+  },
+  "POSTGRES_DATABASE": {
+    "path": "deployment.postgresql.database",
+    "type": "string",
+    "default": "maas"
+  },
+  "POSTGRES_USER": {
+    "path": "deployment.postgresql.user",
+    "type": "string",
+    "default": "maas"
+  },
+  "BACKUP_DIRECTORY": {
+    "path": "deployment.backup.directory",
+    "type": "string",
+    "default": "/var/backups/maas"
+  },
+  "BACKUP_RETAIN": {
+    "path": "deployment.backup.retain",
+    "type": "integer",
+    "default": 14
+  }
+}

@@ -1,0 +1,23 @@
+name: Check installation variables
+description: Resolve repository variables, apply defaults, and validate installation readiness.
+inputs:
+  variables-json:
+    description: Repository configuration variables serialized as JSON. Never pass secrets.
+    required: true
+  write-config:
+    description: Write validated configuration into the runner checkout for ISO construction.
+    default: 'false'
+runs:
+  using: composite
+  steps:
+    - name: Check required variables and resolve defaults
+      shell: bash
+      env:
+        ACTIONS_VARIABLES_JSON: ${{ inputs.variables-json }}
+        WRITE_CONFIG: ${{ inputs.write-config }}
+      run: |
+        args=()
+        if [[ "$WRITE_CONFIG" == "true" ]]; then
+          args+=(--write-config)
+        fi
+        python3 scripts/configure-actions.py "${args[@]}"

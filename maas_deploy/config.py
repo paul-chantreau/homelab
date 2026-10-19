@@ -70,6 +70,7 @@ DEPLOYMENT_KEYS = {
     "timezone",
     "locale",
     "keyboard_layout",
+    "keyboard_variant",
     "admin_user",
     "ssh_authorized_keys",
     "disk",
@@ -338,6 +339,9 @@ def _validate_deployment(deployment: Any, mode: str, errors: list[str]) -> None:
             errors.append(f"deployment.{key} must be a non-empty string")
     if not isinstance(deployment.get("timezone"), str) or not _TIMEZONE.match(str(deployment.get("timezone"))):
         errors.append("deployment.timezone must be an IANA timezone name")
+    variant = deployment.get("keyboard_variant", "")
+    if not isinstance(variant, str) or not re.fullmatch(r"[A-Za-z0-9_-]*", variant):
+        errors.append("deployment.keyboard_variant must be an XKB variant name")
     admin = deployment.get("admin_user")
     if not isinstance(admin, str) or not _USER.match(admin):
         errors.append("deployment.admin_user must be a local account name")

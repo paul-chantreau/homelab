@@ -76,6 +76,7 @@ def render_autoinstall(
     rendered = environment.get_template("autoinstall.yaml.j2").render(
         locale=deployment["locale"],
         keyboard_layout=deployment["keyboard_layout"],
+        keyboard_variant=deployment.get("keyboard_variant", ""),
         timezone=deployment["timezone"],
         hostname=deployment["hostname"],
         admin_user=deployment["admin_user"],

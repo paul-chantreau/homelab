@@ -6,6 +6,7 @@ autoinstall:
   locale: {{ locale | tojson }}
   keyboard:
     layout: {{ keyboard_layout | tojson }}
+    variant: {{ keyboard_variant | tojson }}
   timezone: {{ timezone | tojson }}
   identity:
     hostname: {{ hostname | tojson }}

@@ -1,0 +1,24 @@
+name: Check installation variables
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Install configuration tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-yaml
+      - name: Validate repository variables
+        uses: ./.github/actions/check-variables
+        with:
+          variables-json: ${{ toJSON(vars) }}
