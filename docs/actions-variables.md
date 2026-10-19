@@ -1,22 +1,23 @@
-# GitHub Actions installation variables
-Create repository **Variables**, not Secrets, in Settings → Secrets and variables → Actions → Variables.
-Only public SSH keys belong in `SSH_PUBLIC_KEY`. MAAS/PostgreSQL passwords and the MAAS API key remain generated on the installed server. Never upload a private SSH key.
+# GitHub Actions configuration: Secrets and Variables
 
-## Create missing variables
+## Migrate existing topology Variables
 
-From an authorized workstation with Python 3 and GitHub CLI installed and authenticated:
+From an authenticated GitHub CLI on your workstation:
 
-```bash
-python3 scripts/create-actions-variables.py --repo paul-chantreau/homelab
+```powershell
+py .\scripts\migrate-actions-secrets.py
 ```
 
-The GitHub identity must have repository Actions **Variables read/write** permission. The script reads all existing variables first, preserves every existing value, and creates only missing entries. Required fields and disk alternatives start as `__REQUIRED__`; replace these placeholders with actual site values. Fill at least one disk identifier; leave the other disk placeholders alone or delete those unused variables. Optional variables are created with the defaults below. If access is denied, nothing is created. If creation fails partway through, earlier additions remain; rerunning safely resumes without overwriting them.
+The identity needs repository Actions Variables and Secrets read/write permissions. Values are sent to `gh secret set` through standard input, never command-line arguments, temporary files or logs. The script creates each missing Secret, confirms its metadata, then deletes its source Variable. Existing Secrets are never overwritten. If both exist, it preserves both and reports the duplicate for manual review; remove the public Variable after verifying your Secret configuration. A partial failure leaves unmigrated values untouched and the script can safely be rerun.
 
-## Required: no defaults
+This migration cannot remove information already present in historical logs, downloads or old artifacts. Review their access and delete obsolete artifacts where necessary.
 
-| Variable | Format |
+## Required Actions Secrets
+
+Open Settings → Secrets and variables → Actions → **Secrets** → New repository secret. Keep the following names exactly as listed. No fallback to public Variables is allowed.
+
+| Secret | Format |
 | --- | --- |
-| `SSH_PUBLIC_KEY` | keys |
 | `SWITCH_FIRMWARE_VERSION` | string |
 | `SWITCH_ROUTER_PORT` | integer |
 | `SWITCH_MAAS_PORT` | integer |
@@ -33,19 +34,23 @@ The GitHub identity must have repository Actions **Variables read/write** permis
 | `PROVISIONING_DHCP_END` | string |
 | `PROVISIONING_TEST_HOST` | string |
 
-`SSH_PUBLIC_KEY` accepts one public key per line. Lists must be JSON, e.g. `[5,6,7]` for switch ports or `["192.0.2.1"]` for DNS. Use real values from the site, not these documentation examples. Both VLAN IDs must be explicitly set; the YAML placeholders are never used as Actions defaults.
+Lists use JSON: `[5,6,7]` for switch ports and `["192.0.2.1"]` for DNS. Use your actual site values. VLAN IDs must be explicitly supplied. `PROVISIONING_TEST_HOST` is outside the DHCP pool and different from the controller.
 
-## Disk: at least one identifier
+## Disk Secrets: at least one required
 
-| Variable | Format |
+| Secret | Format |
 | --- | --- |
 | `DISK_SERIAL` | string |
 | `DISK_WWN` | string |
 | `DISK_BY_ID` | string |
 
-Identify the disk on the target server using `lsblk -d -o NAME,MODEL,SERIAL,WWN,SIZE,TYPE` and `ls -l /dev/disk/by-id/`. Multiple identifiers must match the same disk. `DISK_BY_ID` must be a `/dev/disk/by-id/...` path.
+Identify the disk on the target server with `lsblk -d -o NAME,MODEL,SERIAL,WWN,SIZE,TYPE` and `ls -l /dev/disk/by-id/`. Multiple identifiers must identify the same disk. `DISK_BY_ID` must start with `/dev/disk/by-id/`. Unused alternatives may be absent; do not create placeholder Secrets.
 
-## Optional: defaults applied when missing or blank
+## Required Actions Variable
+
+`SSH_PUBLIC_KEY` remains a **Variable**. Supply public `.pub` contents, one public key per line. Never upload a private SSH key. The account's private SSH key stays on your workstation.
+
+## Optional Actions Variables with defaults
 
 | Variable | Default |
 | --- | --- |
@@ -62,16 +67,26 @@ Identify the disk on the target server using `lsblk -d -o NAME,MODEL,SERIAL,WWN,
 | `BACKUP_DIRECTORY` | `/var/backups/maas` |
 | `BACKUP_RETAIN` | `14` |
 
+Create missing public Variables without overwriting existing values:
+
+```powershell
+py .\scripts\create-actions-variables.py
+```
+
+The script creates only Variables, never topology Secrets. Configure missing Secrets manually or use the migration helper above.
+
 ## Check and build
 
-Run **Check installation variables** in Actions to validate current repository variables without downloading an ISO or modifying the configuration. This workflow also runs on pushes to `main`. Missing repository variables do not block the independent pull-request code validation suite.
+**Check installation variables** runs manually and on pushes to `main`. The manual ISO workflow invokes the same local composite action. Both explicitly pass only the allowlisted topology/disk Secrets, never `toJSON(secrets)`. Pull-request validation never needs the installation Secrets.
 
-The **Build MAAS autoinstall ISO** manual workflow invokes the same local composite action, applies defaults, validates all required inputs and cross-field installation rules, then writes the effective `network.yaml` and `deployment.yaml` only into the runner checkout. These files are embedded in the ISO and copied to the installed server. Nothing is committed by the workflow. The summary lists variable names and whether values were configured or defaulted, without printing values.
+The Python checker resolves Secrets and Variables separately, applies optional defaults, and validates installation constraints before ISO download. Its summary and errors show field names/statuses, never values. Secret fields accidentally left in Variables are ignored. Missing Secrets fail the check, even if an equivalent Variable exists.
 
-There is no `confirm_disk_erase` workflow input. A manual ISO build with a valid disk identity prepares an **installation ISO that will erase that matching disk when booted**. The internal `disk.confirm_erase` flag is set automatically for this build. The installer still refuses to proceed unless exactly one physical disk matches the configured identity. DHCP activation and switch confirmation remain explicit on-site operations.
+For an ISO build, validated YAML files replace the runner's checkout copies with mode 0600 and are embedded in the ISO for the installed server. An always-run cleanup step removes those YAML files and the generated ISO from the runner after artifact handling. This is ordinary cleanup, not a guarantee of secure erasure.
 
-The following are not Actions inputs: `DISK_MODEL`, `PROVISIONING_GATEWAY`, `PROVISIONING_DNS`, `BACKUP_OFFHOST_TARGET`. Generated configuration fixes disk model to null, provisioning gateway to null, provisioning DNS to an empty list, and off-host backup target to null. Backups therefore stay on the controller. Existing variables with these names are ignored; the creation script does not delete existing user variables.
+**The ISO still contains the full resolved network topology and disk identity.** GitHub Secrets protect configuration storage and help mask logs; they do not encrypt an ISO or protect it from someone who can download it. Control repository/artifact access and protect downloaded copies. The MAAS/PostgreSQL passwords and API key remain generated on the installed server and are not supplied by GitHub.
 
-Changing GitHub variables affects future builds, not an already installed controller. Configuration can be read from the ISO; GitHub Variables are not confidential storage. Keep compatibility versions, checksum expectations and network safety constraints in version control.
+There is no `confirm_disk_erase` workflow input: manually building with a valid disk identity prepares an installation ISO that **erases that matching disk when booted**. The internal flag is set automatically. The physical installer still requires exactly one matching disk; switch confirmation and DHCP activation remain on-site steps.
 
-For local checking without writing files, supply a JSON object as `ACTIONS_VARIABLES_JSON` and run `python3 scripts/configure-actions.py`. Add `--write-config` only in a disposable build checkout: it replaces the canonical YAML with the validated configuration.
+`DISK_MODEL`, `PROVISIONING_GATEWAY`, `PROVISIONING_DNS` and `BACKUP_OFFHOST_TARGET` are not Actions inputs. Generated values remain null/empty; backups stay on the controller. Changing GitHub settings affects future builds, not an installed server.
+
+For local checks, supply public settings as `ACTIONS_VARIABLES_JSON` and confidential settings as `ACTIONS_SECRETS_JSON`, then run `python3 scripts/configure-actions.py`. Do not print or paste the confidential JSON. Use `--write-config` only in a disposable build checkout.

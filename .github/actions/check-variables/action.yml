@@ -2,7 +2,10 @@ name: Check installation variables
 description: Resolve repository variables, apply defaults, and validate installation readiness.
 inputs:
   variables-json:
-    description: Repository configuration variables serialized as JSON. Never pass secrets.
+    description: Non-sensitive repository configuration variables serialized as JSON.
+    required: true
+  secrets-json:
+    description: Explicit allowlist of topology and disk secrets serialized as JSON.
     required: true
   write-config:
     description: Write validated configuration into the runner checkout for ISO construction.
@@ -14,6 +17,7 @@ runs:
       shell: bash
       env:
         ACTIONS_VARIABLES_JSON: ${{ inputs.variables-json }}
+        ACTIONS_SECRETS_JSON: ${{ inputs.secrets-json }}
         WRITE_CONFIG: ${{ inputs.write-config }}
       run: |
         args=()

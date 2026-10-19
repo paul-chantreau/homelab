@@ -2,156 +2,187 @@
   "SSH_PUBLIC_KEY": {
     "path": "deployment.ssh_authorized_keys",
     "type": "keys",
-    "required": true
+    "required": true,
+    "source": "variable"
   },
   "SWITCH_FIRMWARE_VERSION": {
     "path": "network.switch.firmware_version",
     "type": "string",
-    "required": true
+    "required": true,
+    "source": "secret"
   },
   "SWITCH_ROUTER_PORT": {
     "path": "network.switch.router_port",
     "type": "integer",
-    "required": true
+    "required": true,
+    "source": "secret"
   },
   "SWITCH_MAAS_PORT": {
     "path": "network.switch.maas_port",
     "type": "integer",
-    "required": true
+    "required": true,
+    "source": "secret"
   },
   "SWITCH_PROVISIONING_PORTS": {
     "path": "network.switch.provisioning_ports",
     "type": "integer-list",
-    "required": true
+    "required": true,
+    "source": "secret"
   },
   "MANAGEMENT_INTERFACE_MAC": {
     "path": "network.management.interface_mac",
     "type": "string",
-    "required": true
+    "required": true,
+    "source": "secret"
   },
   "MANAGEMENT_ADDRESS": {
     "path": "network.management.address",
     "type": "string",
-    "required": true
+    "required": true,
+    "source": "secret"
   },
   "MANAGEMENT_GATEWAY": {
     "path": "network.management.gateway",
     "type": "string",
-    "required": true
+    "required": true,
+    "source": "secret"
   },
   "MANAGEMENT_DNS": {
     "path": "network.management.dns",
     "type": "string-list",
-    "required": true
+    "required": true,
+    "source": "secret"
   },
   "MANAGEMENT_VLAN_ID": {
     "path": "network.management.vlan_id",
     "type": "integer",
-    "required": true
+    "required": true,
+    "source": "secret"
   },
   "PROVISIONING_VLAN_ID": {
     "path": "network.provisioning.vlan_id",
     "type": "integer",
-    "required": true
+    "required": true,
+    "source": "secret"
   },
   "PROVISIONING_SUBNET": {
     "path": "network.provisioning.subnet",
     "type": "string",
-    "required": true
+    "required": true,
+    "source": "secret"
   },
   "PROVISIONING_CONTROLLER_ADDRESS": {
     "path": "network.provisioning.controller_address",
     "type": "string",
-    "required": true
+    "required": true,
+    "source": "secret"
   },
   "PROVISIONING_DHCP_START": {
     "path": "network.provisioning.dhcp.range_start",
     "type": "string",
-    "required": true
+    "required": true,
+    "source": "secret"
   },
   "PROVISIONING_DHCP_END": {
     "path": "network.provisioning.dhcp.range_end",
     "type": "string",
-    "required": true
+    "required": true,
+    "source": "secret"
   },
   "PROVISIONING_TEST_HOST": {
     "path": "network.provisioning.acceptance.test_host",
     "type": "string",
-    "required": true
+    "required": true,
+    "source": "secret"
   },
   "DISK_SERIAL": {
     "path": "deployment.disk.serial",
     "type": "string",
-    "group": "disk"
+    "group": "disk",
+    "source": "secret"
   },
   "DISK_WWN": {
     "path": "deployment.disk.wwn",
     "type": "string",
-    "group": "disk"
+    "group": "disk",
+    "source": "secret"
   },
   "DISK_BY_ID": {
     "path": "deployment.disk.by_id",
     "type": "string",
-    "group": "disk"
+    "group": "disk",
+    "source": "secret"
   },
   "HOSTNAME": {
     "path": "deployment.hostname",
     "type": "string",
-    "default": "maas-controller"
+    "default": "maas-controller",
+    "source": "variable"
   },
   "TIMEZONE": {
     "path": "deployment.timezone",
     "type": "string",
-    "default": "Europe/Paris"
+    "default": "Europe/Paris",
+    "source": "variable"
   },
   "LOCALE": {
     "path": "deployment.locale",
     "type": "string",
-    "default": "en_US.UTF-8"
+    "default": "en_US.UTF-8",
+    "source": "variable"
   },
   "KEYBOARD_LAYOUT": {
     "path": "deployment.keyboard_layout",
     "type": "string",
-    "default": "fr"
+    "default": "fr",
+    "source": "variable"
   },
   "KEYBOARD_VARIANT": {
     "path": "deployment.keyboard_variant",
     "type": "string",
-    "default": "legacy"
+    "default": "legacy",
+    "source": "variable"
   },
   "ADMIN_USER": {
     "path": "deployment.admin_user",
     "type": "string",
-    "default": "maasadmin"
+    "default": "maasadmin",
+    "source": "variable"
   },
   "MAAS_ADMIN_USERNAME": {
     "path": "deployment.maas.admin_username",
     "type": "string",
-    "default": "admin"
+    "default": "admin",
+    "source": "variable"
   },
   "MAAS_ADMIN_EMAIL": {
     "path": "deployment.maas.admin_email",
     "type": "string",
-    "default": "admin@maas.local"
+    "default": "admin@maas.local",
+    "source": "variable"
   },
   "POSTGRES_DATABASE": {
     "path": "deployment.postgresql.database",
     "type": "string",
-    "default": "maas"
+    "default": "maas",
+    "source": "variable"
   },
   "POSTGRES_USER": {
     "path": "deployment.postgresql.user",
     "type": "string",
-    "default": "maas"
+    "default": "maas",
+    "source": "variable"
   },
   "BACKUP_DIRECTORY": {
     "path": "deployment.backup.directory",
     "type": "string",
-    "default": "/var/backups/maas"
+    "default": "/var/backups/maas",
+    "source": "variable"
   },
   "BACKUP_RETAIN": {
     "path": "deployment.backup.retain",
     "type": "integer",
-    "default": 14
+    "default": 14,
+    "source": "variable"
   }
 }

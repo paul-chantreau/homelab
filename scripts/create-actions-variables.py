@@ -26,6 +26,9 @@ def main() -> int:
         return 1
     existing = {item['name'] for page in json.loads(result.stdout) for item in page['variables']}
     for name, spec in catalog().items():
+        if spec.get('source') == 'secret':
+            print(f'{name}: configure in Actions Secrets (not Variables)')
+            continue
         if name in existing:
             print(f'{name}: preserved')
             continue

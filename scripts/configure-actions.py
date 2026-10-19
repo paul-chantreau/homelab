@@ -22,9 +22,12 @@ def main() -> int:
     args = parser.parse_args()
     try:
         variables = json.loads(os.environ.get('ACTIONS_VARIABLES_JSON', '{}'))
+        secrets = json.loads(os.environ.get('ACTIONS_SECRETS_JSON', '{}'))
+        if not isinstance(secrets, dict):
+            raise ValueError('Secrets must be a JSON object')
         if not isinstance(variables, dict):
             raise ValueError('Variables must be a JSON object')
-        config, statuses = resolve(load_config(args.root / 'config/network.yaml', args.root / 'config/deployment.yaml'), variables)
+        config, statuses = resolve(load_config(args.root / 'config/network.yaml', args.root / 'config/deployment.yaml'), variables, secrets)
     except (ConfigError, ValueError) as error:
         # Diagnostics identify fields and expected types, never supplied values.
         print(str(error), file=sys.stderr)
@@ -37,7 +40,9 @@ def main() -> int:
             handle.write(summary)
     if args.write_config:
         for name, value in [('network', config.network), ('deployment', config.deployment)]:
-            (args.root / 'config' / f'{name}.yaml').write_text(yaml.safe_dump({name: value}, sort_keys=False), encoding='utf-8')
+            path = args.root / 'config' / f'{name}.yaml'
+            path.chmod(0o600)
+            path.write_text(yaml.safe_dump({name: value}, sort_keys=False), encoding='utf-8')
     return 0
 
 

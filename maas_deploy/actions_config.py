@@ -32,12 +32,15 @@ def _parse(raw: str, kind: str) -> Any:
     return raw
 
 
-def resolve(base: LoadedConfig, variables: dict[str, Any]) -> tuple[LoadedConfig, dict[str, str]]:
+def resolve(base: LoadedConfig, variables: dict[str, Any], secrets: dict[str, Any] | None = None) -> tuple[LoadedConfig, dict[str, str]]:
+    secrets = secrets or {}
     document = {'network': copy.deepcopy(base.network), 'deployment': copy.deepcopy(base.deployment)}
     errors = []
     statuses = {}
     for name, spec in catalog().items():
-        raw = variables.get(name, '')
+        source = spec.get('source', 'variable')
+        values = secrets if source == 'secret' else variables
+        raw = values.get(name, '')
         if not isinstance(raw, str):
             errors.append(f'{name}: expected a string variable')
             continue
@@ -55,7 +58,7 @@ def resolve(base: LoadedConfig, variables: dict[str, Any]) -> tuple[LoadedConfig
             value = spec['default']
             statuses[name] = 'default'
         elif spec.get('required'):
-            errors.append(f'{name}: required variable is missing or empty')
+            errors.append(f'{name}: required {source} is missing or empty')
             continue
         else:
             value = None
@@ -65,9 +68,9 @@ def resolve(base: LoadedConfig, variables: dict[str, Any]) -> tuple[LoadedConfig
         for parent in parents:
             target = target[parent]
         target[key] = value
-    if not any(isinstance(variables.get(name), str) and variables[name].strip() not in ('', '__REQUIRED__')
+    if not any(isinstance(secrets.get(name), str) and secrets[name].strip() not in ('', '__REQUIRED__')
                for name in ('DISK_SERIAL', 'DISK_WWN', 'DISK_BY_ID')):
-        errors.append('At least one of DISK_SERIAL, DISK_WWN, DISK_BY_ID is required')
+        errors.append('At least one Secret DISK_SERIAL, DISK_WWN, DISK_BY_ID is required')
     if errors:
         raise ConfigError(errors)
     # These are deliberately not user-facing Actions variables. A manual ISO

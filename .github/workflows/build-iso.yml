@@ -68,6 +68,27 @@ jobs:
         uses: ./.github/actions/check-variables
         with:
           variables-json: ${{ toJSON(vars) }}
+          secrets-json: |
+            {
+              "SWITCH_FIRMWARE_VERSION": ${{ toJSON(secrets.SWITCH_FIRMWARE_VERSION) }},
+              "SWITCH_ROUTER_PORT": ${{ toJSON(secrets.SWITCH_ROUTER_PORT) }},
+              "SWITCH_MAAS_PORT": ${{ toJSON(secrets.SWITCH_MAAS_PORT) }},
+              "SWITCH_PROVISIONING_PORTS": ${{ toJSON(secrets.SWITCH_PROVISIONING_PORTS) }},
+              "MANAGEMENT_INTERFACE_MAC": ${{ toJSON(secrets.MANAGEMENT_INTERFACE_MAC) }},
+              "MANAGEMENT_ADDRESS": ${{ toJSON(secrets.MANAGEMENT_ADDRESS) }},
+              "MANAGEMENT_GATEWAY": ${{ toJSON(secrets.MANAGEMENT_GATEWAY) }},
+              "MANAGEMENT_DNS": ${{ toJSON(secrets.MANAGEMENT_DNS) }},
+              "MANAGEMENT_VLAN_ID": ${{ toJSON(secrets.MANAGEMENT_VLAN_ID) }},
+              "PROVISIONING_VLAN_ID": ${{ toJSON(secrets.PROVISIONING_VLAN_ID) }},
+              "PROVISIONING_SUBNET": ${{ toJSON(secrets.PROVISIONING_SUBNET) }},
+              "PROVISIONING_CONTROLLER_ADDRESS": ${{ toJSON(secrets.PROVISIONING_CONTROLLER_ADDRESS) }},
+              "PROVISIONING_DHCP_START": ${{ toJSON(secrets.PROVISIONING_DHCP_START) }},
+              "PROVISIONING_DHCP_END": ${{ toJSON(secrets.PROVISIONING_DHCP_END) }},
+              "PROVISIONING_TEST_HOST": ${{ toJSON(secrets.PROVISIONING_TEST_HOST) }},
+              "DISK_SERIAL": ${{ toJSON(secrets.DISK_SERIAL) }},
+              "DISK_WWN": ${{ toJSON(secrets.DISK_WWN) }},
+              "DISK_BY_ID": ${{ toJSON(secrets.DISK_BY_ID) }}
+            }
           write-config: 'true'
 
       - name: Build the autoinstall ISO
@@ -85,3 +106,10 @@ jobs:
             build/build-manifest.json
           if-no-files-found: error
           retention-days: 14
+
+      - name: Remove resolved configuration from the runner
+        if: always()
+        shell: bash
+        run: |
+          rm -f config/network.yaml config/deployment.yaml
+          rm -f build/ubuntu-maas-autoinstall.iso

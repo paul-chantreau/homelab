@@ -8,11 +8,22 @@ from pathlib import Path
 import pytest
 import yaml
 
-from maas_deploy.actions_config import catalog, resolve
+from maas_deploy.actions_config import catalog, resolve as resolve_sources
 from maas_deploy.autoinstall import render_autoinstall
 from maas_deploy.config import ConfigError
 
 ROOT = Path(__file__).resolve().parents[1]
+
+def split_sources(values):
+    specs = catalog()
+    return ({name: value for name, value in values.items() if specs.get(name, {}).get('source') != 'secret'},
+            {name: value for name, value in values.items() if specs.get(name, {}).get('source') == 'secret'})
+
+
+def resolve(base, values):
+    variables, secrets = split_sources(values)
+    return resolve_sources(base, variables, secrets)
+
 
 
 @pytest.fixture
@@ -100,7 +111,9 @@ def test_cli_validates_before_writing_and_embeds_effective_config(tmp_path, vari
     result = subprocess.run(command, env=env, capture_output=True, text=True)
     assert result.returncode == 1
     assert (tmp_path / 'config/deployment.yaml').read_text() == original
-    env['ACTIONS_VARIABLES_JSON'] = json.dumps(variables)
+    public, private = split_sources(variables)
+    env['ACTIONS_VARIABLES_JSON'] = json.dumps(public)
+    env['ACTIONS_SECRETS_JSON'] = json.dumps(private)
     result = subprocess.run(command, env=env, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
     saved = yaml.safe_load((tmp_path / 'config/deployment.yaml').read_text())['deployment']
@@ -126,10 +139,10 @@ def test_variable_creation_preserves_existing_and_creates_placeholders(monkeypat
     monkeypatch.setattr(sys, 'argv', ['create-actions-variables.py'])
     assert module['main']() == 0
     payloads = [json.loads(kwargs['input']) for _, kwargs in calls[1:]]
-    assert len(payloads) == len(catalog()) - 2
+    assert len(payloads) == sum(s['source'] == 'variable' for s in catalog().values()) - 2
     assert not {'HOSTNAME', 'SSH_PUBLIC_KEY'} & {p['name'] for p in payloads}
     assert next(p['value'] for p in payloads if p['name'] == 'TIMEZONE') == 'Europe/Paris'
-    assert next(p['value'] for p in payloads if p['name'] == 'DISK_SERIAL') == '__REQUIRED__'
+    assert not {p['name'] for p in payloads} & {n for n, s in catalog().items() if s['source'] == 'secret'}
 
 
 def test_access_denial_never_attempts_variable_creation(monkeypatch):
@@ -146,11 +159,75 @@ def test_access_denial_never_attempts_variable_creation(monkeypatch):
     assert len(calls) == 1
 
 
-def test_workflows_use_the_same_check_without_secret_bindings():
+def test_workflows_explicitly_bind_only_the_expected_secrets():
     for name in ['build-iso.yml', 'check-variables.yml']:
         workflow = yaml.safe_load((ROOT / '.github/workflows' / name).read_text())
         checks = [step for job in workflow['jobs'].values() for step in job['steps']
                   if step.get('uses') == './.github/actions/check-variables']
         assert len(checks) == 1
         assert checks[0]['with']['variables-json'] == '${{ toJSON(vars) }}'
+        bindings = checks[0]['with']['secrets-json']
+        import re
+        assert set(re.findall(r'toJSON\(secrets\.([A-Z_]+)\)', bindings)) == {n for n, s in catalog().items() if s['source'] == 'secret'}
+        assert 'toJSON(secrets)' not in bindings
         assert checks[0]['with'].get('write-config', 'false') == ('true' if name == 'build-iso.yml' else 'false')
+
+
+def test_topology_variables_cannot_replace_missing_secrets(committed, variables):
+    with pytest.raises(ConfigError, match='MANAGEMENT_ADDRESS: required secret'):
+        resolve_sources(committed, variables, {})
+
+
+def test_secrets_override_stale_public_variables(committed, variables):
+    public, private = split_sources(variables)
+    public['MANAGEMENT_ADDRESS'] = '203.0.113.99/24'
+    config, _ = resolve_sources(committed, public, private)
+    assert config.network['management']['address'] == private['MANAGEMENT_ADDRESS']
+
+
+def test_cli_does_not_print_secret_values_on_failure(tmp_path, variables):
+    public, private = split_sources(variables)
+    private['MANAGEMENT_ADDRESS'] = 'CONFIDENTIAL_INVALID_ADDRESS'
+    result = subprocess.run([sys.executable, str(ROOT / 'scripts/configure-actions.py')],
+                            env={**os.environ, 'ACTIONS_VARIABLES_JSON': json.dumps(public),
+                                 'ACTIONS_SECRETS_JSON': json.dumps(private)}, capture_output=True, text=True)
+    assert result.returncode == 1
+    assert 'CONFIDENTIAL_INVALID_ADDRESS' not in result.stdout + result.stderr
+    assert 'network.management.address' in result.stderr
+
+
+@pytest.mark.parametrize('mode', ['success', 'create-fails', 'existing', 'unconfirmed', 'access-denied'])
+def test_secret_migration_preserves_values_and_deletes_only_after_confirmation(monkeypatch, capsys, mode):
+    import runpy
+    from types import SimpleNamespace
+    module = runpy.run_path(str(ROOT / 'scripts/migrate-actions-secrets.py'))
+    calls = []
+    created = False
+    def fake_run(command, **kwargs):
+        nonlocal created
+        calls.append((command, kwargs))
+        if command[:3] == ['gh', 'secret', 'set']:
+            assert kwargs['input'] == '198.51.100.77'
+            assert '198.51.100.77' not in ' '.join(command)
+            if mode == 'create-fails':
+                return SimpleNamespace(returncode=1, stdout='')
+            created = True
+            return SimpleNamespace(returncode=0, stdout='')
+        if '--paginate' in command:
+            if mode == 'access-denied':
+                return SimpleNamespace(returncode=1, stdout='')
+            if command[-1].endswith('/variables'):
+                return SimpleNamespace(returncode=0, stdout=json.dumps([{'variables': [{'name': 'MANAGEMENT_ADDRESS', 'value': '198.51.100.77'}]}]))
+            names = [{'name': 'MANAGEMENT_ADDRESS'}] if mode == 'existing' or (created and mode != 'unconfirmed') else []
+            return SimpleNamespace(returncode=0, stdout=json.dumps([{'secrets': names}]))
+        assert created
+        assert command[-1].endswith('/variables/MANAGEMENT_ADDRESS')
+        return SimpleNamespace(returncode=0, stdout='')
+    monkeypatch.setattr(subprocess, 'run', fake_run)
+    monkeypatch.setattr(sys, 'argv', ['migrate-actions-secrets.py'])
+    result = module['main']()
+    assert result == (0 if mode in ['success', 'existing'] else 1)
+    deletes = [cmd for cmd, _ in calls if 'DELETE' in cmd]
+    assert len(deletes) == (1 if mode == 'success' else 0)
+    captured = capsys.readouterr()
+    assert '198.51.100.77' not in captured.out + captured.err

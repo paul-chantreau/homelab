@@ -434,11 +434,11 @@ Use your own subnets. `192.0.2.0/24` and `198.51.100.0/24` are documentation ran
 
 ## I. Building the ISO with GitHub Actions
 
-The workflow is `.github/workflows/build-iso.yml`. It requests `contents: read` and uses pinned checkout and artifact-upload actions. Repository Actions **Variables** supply the installation configuration, including `SSH_PUBLIC_KEY`. MAAS and PostgreSQL passwords are generated on the installed server, never in GitHub.
+The workflow is `.github/workflows/build-iso.yml`. It requests `contents: read` and uses pinned checkout and artifact-upload actions. Repository Actions **Secrets** supply network topology and disk identities. Non-sensitive preferences and `SSH_PUBLIC_KEY` remain in **Variables**. MAAS and PostgreSQL passwords are generated on the installed server, never in GitHub.
 
-See [GitHub Actions variables](docs/actions-variables.md) for the full required/defaulted list and the script that creates missing variables without overwriting existing values. Defaults include `Europe/Paris` and French legacy keyboard (`fr`, variant `legacy`). Run **Check installation variables** to check the current configuration independently of ISO construction.
+See [GitHub Actions variables](docs/actions-variables.md) for the required/defaulted list and helpers to migrate topology Variables to Secrets and create missing public Variables without overwriting existing values. Defaults include `Europe/Paris` and French legacy keyboard (`fr`, variant `legacy`). Run **Check installation variables** to check the current configuration independently of ISO construction.
 
-The build validates all required variables and at least one disk identifier before downloading the Ubuntu ISO. It writes the resolved configuration into the runner checkout so the ISO and installed server use identical values. There is no disk-confirmation workflow input: the manual build prepares an ISO authorized to erase the explicitly identified disk. The physical installer still requires exactly one matching disk before partitioning. Switch and DHCP activation remain on-site operations.
+The build validates all required Secrets/Variables and at least one disk identifier before downloading the Ubuntu ISO. It writes the resolved configuration into the runner checkout so the ISO and installed server use identical values. There is no disk-confirmation workflow input: the manual build prepares an ISO authorized to erase the explicitly identified disk. The physical installer still requires exactly one matching disk before partitioning. Switch and DHCP activation remain on-site operations.
 
 On a pull request, the `validate` job checks out the branch, installs Ansible and pytest, runs schema validation, `pytest`, `ansible-playbook --syntax-check`, and `ansible-lint`.
 
@@ -446,7 +446,7 @@ The ISO job runs only for a manual `workflow_dispatch`:
 
 1. Open the Actions tab for this repository.
 2. Choose "Build MAAS autoinstall ISO".
-3. Fill the repository Actions variables, then manually run the workflow on the desired branch. An incomplete or inconsistent configuration stops the job before the ISO download.
+3. Fill the repository Actions Secrets and Variables, then manually run the workflow on the desired branch. An incomplete or inconsistent configuration stops the job before the ISO download.
 4. The job downloads `ubuntu-24.04.5-live-server-amd64.iso` from `https://releases.ubuntu.com/24.04.5/` and checks it against the published `SHA256SUMS` and against `deployment.ubuntu.sha256`.
 5. It injects this repository, the rendered autoinstall files, and a patched GRUB configuration. The volume label stays `Ubuntu-Server 24.04.5 LTS amd64`.
 6. Download the `ubuntu-maas-autoinstall` artifact. It contains `ubuntu-maas-autoinstall.iso`, `SHA256SUMS`, and `build-manifest.json`. The artifact is kept for 14 days.
@@ -823,3 +823,7 @@ Operator names on the installed server are `maas-network-activate`, `maas-networ
 `pytest` covers the schema, VLAN and port rules, DHCP range safety, subnet overlap, MAC checks, Netplan rendering, autoinstall rendering, disk identity, DHCP refusal when validation is missing or stale, and a QEMU boot of a small GRUB ISO after the same injection path used for Ubuntu. `ansible-playbook --syntax-check` and `ansible-lint` cover the playbook. A local `scripts/build-iso.sh` run builds the real Ubuntu ISO and checks its checksum.
 
 Those tests are static checks and virtual-machine checks. They do not program a GS724T, and they do not show that a physical provisioning VLAN is isolated from the existing LAN. Section M is the acceptance test that remains.
+
+## Network filtering
+
+See [Network security options](docs/network-security.md) for server firewall and GS724Tv4 ACL recommendations. No host firewall is currently installed by this repository; routing is disabled, but that does not filter access to the controller itself.
