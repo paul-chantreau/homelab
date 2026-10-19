@@ -140,7 +140,7 @@
   "KEYBOARD_VARIANT": {
     "path": "deployment.keyboard_variant",
     "type": "string",
-    "default": "legacy",
+    "default": "latin9",
     "source": "variable"
   },
   "ADMIN_USER": {

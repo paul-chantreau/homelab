@@ -5,7 +5,7 @@ deployment:
   timezone: Europe/Paris
   locale: en_US.UTF-8
   keyboard_layout: fr
-  keyboard_variant: legacy
+  keyboard_variant: latin9
   admin_user: maasadmin
   # Public keys only. The ISO refuses to install until this list is non-empty.
   ssh_authorized_keys: []

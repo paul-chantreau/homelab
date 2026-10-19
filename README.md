@@ -370,7 +370,7 @@ Install mode also checks IPv4 and CIDR syntax, VLAN ID range, duplicate ports, t
 | `deployment.timezone` | IANA timezone. Default `Etc/UTC` |
 | `deployment.locale` | Default `en_US.UTF-8` |
 | `deployment.keyboard_layout` | Default `us` |
-| `deployment.keyboard_variant` | XKB variant; default `legacy` with layout `fr` |
+| `deployment.keyboard_variant` | XKB variant; default `latin9` with layout `fr` |
 | `deployment.admin_user` | Local Linux account. Not `root`, `maas`, or `postgres`. Default `maasadmin` |
 | `deployment.ssh_authorized_keys` | One or more SSH public keys. Install mode rejects an empty list and rejects a private key |
 | `deployment.disk.serial` | Disk serial, from `lsblk` |
@@ -436,7 +436,7 @@ Use your own subnets. `192.0.2.0/24` and `198.51.100.0/24` are documentation ran
 
 The workflow is `.github/workflows/build-iso.yml`. It requests `contents: read` and uses pinned checkout and artifact-upload actions. Repository Actions **Secrets** supply network topology and disk identities. Non-sensitive preferences and `SSH_PUBLIC_KEY` remain in **Variables**. MAAS and PostgreSQL passwords are generated on the installed server, never in GitHub.
 
-See [GitHub Actions variables](docs/actions-variables.md) for the required/defaulted list and helpers to migrate topology Variables to Secrets and create missing public Variables without overwriting existing values. Defaults include `Europe/Paris` and French legacy keyboard (`fr`, variant `legacy`). Run **Check installation variables** to check the current configuration independently of ISO construction.
+See [GitHub Actions variables](docs/actions-variables.md) for the required/defaulted list and helpers to migrate topology Variables to Secrets and create missing public Variables without overwriting existing values. Defaults include `Europe/Paris` and French legacy keyboard (`fr`, variant `latin9`). Run **Check installation variables** to check the current configuration independently of ISO construction.
 
 The build validates all required Secrets/Variables and at least one disk identifier before downloading the Ubuntu ISO. It writes the resolved configuration into the runner checkout so the ISO and installed server use identical values. There is no disk-confirmation workflow input: the manual build prepares an ISO authorized to erase the explicitly identified disk. The physical installer still requires exactly one matching disk before partitioning. Switch and DHCP activation remain on-site operations.
 

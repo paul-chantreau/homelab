@@ -51,7 +51,7 @@ def test_defaults_are_applied_and_rendered(committed, variables):
     assert config.deployment['timezone'] == 'Europe/Paris'
     assert config.deployment['disk']['confirm_erase'] is True
     keyboard = yaml.safe_load(render_autoinstall(config.network, config.deployment, True))['autoinstall']['keyboard']
-    assert keyboard == {'layout': 'fr', 'variant': 'legacy'}
+    assert keyboard == {'layout': 'fr', 'variant': 'latin9'}
     assert statuses['KEYBOARD_LAYOUT'] == 'default'
 
 
@@ -239,3 +239,9 @@ def test_secret_migration_preserves_values_and_deletes_only_after_confirmation(m
     assert len(deletes) == (1 if mode == 'success' else 0)
     captured = capsys.readouterr()
     assert '198.51.100.77' not in captured.out + captured.err
+
+
+def test_invalid_french_legacy_name_fails_before_iso_build(committed, variables):
+    variables.update(KEYBOARD_LAYOUT='fr', KEYBOARD_VARIANT='legacy')
+    with pytest.raises(ConfigError, match="French legacy uses 'latin9'"):
+        resolve(committed, variables)

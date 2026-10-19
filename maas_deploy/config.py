@@ -342,6 +342,8 @@ def _validate_deployment(deployment: Any, mode: str, errors: list[str]) -> None:
     variant = deployment.get("keyboard_variant", "")
     if not isinstance(variant, str) or not re.fullmatch(r"[A-Za-z0-9_-]*", variant):
         errors.append("deployment.keyboard_variant must be an XKB variant name")
+    if deployment.get("keyboard_layout") == "fr" and variant == "legacy":
+        errors.append("deployment.keyboard_variant: French legacy uses 'latin9', not 'legacy'")
     admin = deployment.get("admin_user")
     if not isinstance(admin, str) or not _USER.match(admin):
         errors.append("deployment.admin_user must be a local account name")

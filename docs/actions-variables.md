@@ -58,7 +58,7 @@ Identify the disk on the target server with `lsblk -d -o NAME,MODEL,SERIAL,WWN,S
 | `TIMEZONE` | `Europe/Paris` |
 | `LOCALE` | `en_US.UTF-8` |
 | `KEYBOARD_LAYOUT` | `fr` |
-| `KEYBOARD_VARIANT` | `legacy` |
+| `KEYBOARD_VARIANT` | `latin9` |
 | `ADMIN_USER` | `maasadmin` |
 | `MAAS_ADMIN_USERNAME` | `admin` |
 | `MAAS_ADMIN_EMAIL` | `admin@maas.local` |
