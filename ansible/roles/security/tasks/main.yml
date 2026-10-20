@@ -9,6 +9,14 @@
       PermitRootLogin no
   notify: Restart ssh
 
+- name: Create the SSH privilege separation directory
+  ansible.builtin.file:
+    path: /run/sshd
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
 - name: Validate the SSH configuration
   ansible.builtin.command: sshd -t
   changed_when: false

@@ -34,9 +34,10 @@ jobs:
       - name: Validate the committed configuration schema
         run: python3 scripts/validate-config.py --mode schema --network config/network.yaml --deployment config/deployment.yaml
 
-      - name: Run unit and isolated PostgreSQL integration tests
+      - name: Run unit and isolated integration tests
         env:
           HOMELAB_TEST_POSTGRES: '1'
+          HOMELAB_TEST_SSH: '1'
         run: python3 -m pytest -q
 
       - name: Check Ansible syntax
