@@ -32,7 +32,7 @@ Open Settings → Secrets and variables → Actions → **Secrets** → New repo
 
 These 11 Secrets correspond to every field in `config/network.yaml`. DNS lists use JSON, for example `["192.0.2.1"]`. Use your actual site values. VLAN IDs must be explicitly supplied. `PROVISIONING_TEST_HOST` is outside the DHCP pool and different from the controller.
 
-The GS724Tv4 model, isolated VLAN topology, disabled forwarding, cleared provisioning gateway/DNS options, and explicit DHCP activation are fixed behavior. Physical port numbers are optional private notes in the [wiring worksheet](../README.md#5-physical-port-mapping). They are not build inputs. Existing `SWITCH_ROUTER_PORT`, `SWITCH_MAAS_PORT`, and `SWITCH_PROVISIONING_PORTS` Secrets or Variables can be deleted; workflows ignore them. Physical switch inspection and acceptance remain mandatory.
+The GS724Tv4 model, isolated VLAN topology, disabled forwarding, cleared provisioning gateway/DNS options, and explicit DHCP activation are fixed behavior. Physical port numbers are optional private notes in the [wiring worksheet](../README.md#3-physical-port-mapping). They are not build inputs. Existing `SWITCH_ROUTER_PORT`, `SWITCH_MAAS_PORT`, and `SWITCH_PROVISIONING_PORTS` Secrets or Variables can be deleted; workflows ignore them. Physical switch inspection and acceptance remain mandatory.
 
 ## Disk Secrets: at least one required
 
