@@ -22,7 +22,6 @@ doc = yaml.safe_load(Path(sys.argv[1]).read_text(encoding="utf-8"))["network"]
 switch = doc["switch"]
 print("Confirm these GS724T settings in the switch web interface before continuing.")
 print(f"  Hardware revision: {switch['hardware_revision']}")
-print(f"  Firmware: {switch['firmware_version']}")
 print(f"  Router port: {switch['router_port']}  (unchanged management LAN)")
 print(f"  MAAS port: {switch['maas_port']}  (management untagged, VLAN {doc['provisioning']['vlan_id']} tagged)")
 print(f"  Provisioning ports: {switch['provisioning_ports']}  (VLAN {doc['provisioning']['vlan_id']} untagged, PVID {doc['provisioning']['vlan_id']})")

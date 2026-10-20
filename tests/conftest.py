@@ -25,7 +25,6 @@ def ready(committed: LoadedConfig) -> LoadedConfig:
     network["switch"].update(
         {
             "hardware_revision": "GS724Tv4",
-            "firmware_version": "6.3.1.43",
             "router_port": 1,
             "maas_port": 2,
             "provisioning_ports": [3, 4],

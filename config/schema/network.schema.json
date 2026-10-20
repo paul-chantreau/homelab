@@ -23,13 +23,12 @@
         },
         "switch": {
           "type": "object",
-          "required": ["vendor", "model", "hardware_revision", "firmware_version", "router_port", "maas_port", "provisioning_ports"],
+          "required": ["vendor", "model", "hardware_revision", "router_port", "maas_port", "provisioning_ports"],
           "additionalProperties": false,
           "properties": {
             "vendor": {"const": "netgear"},
             "model": {"const": "GS724T"},
             "hardware_revision": {"const": "GS724Tv4"},
-            "firmware_version": {"type": ["string", "null"]},
             "router_port": {"type": ["integer", "null"]},
             "maas_port": {"type": ["integer", "null"]},
             "provisioning_ports": {"type": "array", "items": {"type": "integer"}}

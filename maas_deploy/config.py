@@ -50,7 +50,6 @@ SWITCH_KEYS = {
     "vendor",
     "model",
     "hardware_revision",
-    "firmware_version",
     "router_port",
     "maas_port",
     "provisioning_ports",
@@ -199,11 +198,6 @@ def _validate_network(network: Any, mode: str, errors: list[str]) -> None:
     revision = switch.get("hardware_revision")
     if revision != HARDWARE_REVISION:
         errors.append("network.switch.hardware_revision must be 'GS724Tv4'")
-    firmware = switch.get("firmware_version")
-    if mode == INSTALL_MODE and firmware in (None, ""):
-        errors.append("network.switch.firmware_version is required before installation")
-    elif firmware not in (None, "") and not isinstance(firmware, str):
-        errors.append("network.switch.firmware_version must be a string")
 
     router = _port(switch.get("router_port"), "network.switch.router_port", PORT_MAX, mode, errors)
     maas = _port(switch.get("maas_port"), "network.switch.maas_port", PORT_MAX, mode, errors)

@@ -2,24 +2,22 @@
 
 This repository builds an Ubuntu Server 24.04 LTS autoinstall ISO, boots it from USB, and lets Ansible on that machine install MAAS with a local PostgreSQL database. The switch is configured by hand in its web interface. MAAS DHCP stays off until a person validates the provisioning VLAN and types an explicit confirmation.
 
-The switch is a GS724Tv4. This repository does not support another GS724T hardware revision. Confirm the label reads GS724Tv4 before changing a port. If it does not, stop.
+This deployment assumes the switch is a Netgear GS724Tv4. The configuration and procedures use that fixed model.
 
 Record all of the following before changing a port, building an ISO, or installing Ubuntu:
 
-1. Confirmation that the label reads GS724Tv4.
-2. Firmware version shown by the switch.
-3. Switch management IP address.
-4. Physical port numbers for the router, the MAAS server, and each future machine.
-5. Existing VLAN membership and PVID of every port you might touch.
-6. Existing switch management VLAN.
+1. Switch management IP address.
+2. Physical port numbers for the router, the MAAS server, and each future machine.
+3. Existing VLAN membership and PVID of every port you might touch.
+4. Existing switch management VLAN.
 
-`config/network.yaml` already sets `hardware_revision` to `GS724Tv4`. Firmware and physical addresses stay null until you read them from the switch and the LAN. The installer refuses to erase a disk until those remaining values are filled in.
+`config/network.yaml` already sets `hardware_revision` to `GS724Tv4`. Physical addresses stay null until you read them from the switch and the LAN. The installer refuses to erase a disk until the required site settings are filled in.
 
 The procedure uses the GS724Tv4 administration manual (25 September 2013, covers GS716Tv3, GS724Tv4, and GS748Tv5): <https://www.downloads.netgear.com/files/GDC/GS716TV3/GS716Tv3_GS724Tv4_GS748Tv5_SWA_25Sept2013.pdf>
 
 The current product page may feature a newer revision: <https://www.netgear.com/business/wired/switches/smart-cloud/gs724t/>. Use the 2013 manual above, not the manual highlighted for a later switch.
 
-This article does not apply to the GS724Tv4 and must not be used as the procedure: <https://kb.netgear.com/31026/How-to-configure-a-VLAN-on-a-NETGEAR-managed-switch>. It describes fully managed switches on firmware 11 and later. Its menu puts VLAN creation under Switching, VLAN, Advanced. The GS724Tv4 manual puts VLAN creation under Switching, VLAN, Basic.
+This article does not apply to the GS724Tv4 and must not be used as the procedure: <https://kb.netgear.com/31026/How-to-configure-a-VLAN-on-a-NETGEAR-managed-switch>. It describes a different managed-switch family. Its menu puts VLAN creation under Switching, VLAN, Advanced. The GS724Tv4 manual puts VLAN creation under Switching, VLAN, Basic.
 
 Virtual tests in this repository do not configure a GS724T and do not prove that VLAN 100 is isolated. That check happens on site, after the web interface has been changed, using the procedure in section M.
 
@@ -147,7 +145,7 @@ One Netgear GS724Tv4:
 - IEEE 802.1Q VLANs, configured only through the web interface.
 - Ports 1–26 (24 copper and 2 SFP), up to 256 VLANs. VLANs 1, 2, and 3 are predefined and cannot be deleted. Ports start as untagged members of those three.
 - VLAN 100 is a valid provisioning VLAN. It is not one of the predefined VLANs.
-- Firmware that can still open the web interface. Record the version before changing VLANs.
+- A management web interface reachable from the existing LAN.
 
 Other requirements:
 
@@ -189,19 +187,14 @@ Collect the following by looking at the router and the switch, not by guessing f
 | Existing DHCP scope | Router DHCP settings. Copy the start, end, and subnet before any switch work |
 | Current LAN subnet | An address and prefix on a LAN host, confirmed against the router |
 | Netgear management IP | Section E |
-| GS724Tv4 firmware | Section D |
 | Physical switch port mapping | Front-panel link LEDs, section G |
 | Server NIC MAC address | `ip link` on the server, or the label on the NIC. This becomes `network.management.interface_mac` |
 
 Do not infer VLAN membership from the fact that a host has an address. Untagged traffic on the management VLAN looks the same to the host as an untagged flat LAN.
 
-## D. Confirming the GS724Tv4
+## D. GS724Tv4 switch assumptions
 
-On the switch label, confirm the model line reads GS724Tv4. The product name "GS724T" without the revision is not enough. If the label is a different revision, stop. This repository's menus and validator apply only to the GS724Tv4.
-
-Then open the web interface (section E). System Information shows Model Name and Software Version. Write the Software Version into `config/network.yaml` as `firmware_version`. Leave `hardware_revision` set to `GS724Tv4`.
-
-Also record:
+The switch is assumed to be a Netgear GS724Tv4. Leave `hardware_revision` set to `GS724Tv4` and use the web-interface procedures from its administration manual. Open the web interface (section E) and record:
 
 - Management IP address.
 - Management VLAN. It is configured under System, Management, IP Configuration. Leave it unchanged.
@@ -341,7 +334,6 @@ The committed files pass schema mode and fail install mode. That is intentional.
 | `network.switch.vendor` | `netgear` |
 | `network.switch.model` | `GS724T` |
 | `network.switch.hardware_revision` | Must stay `GS724Tv4` |
-| `network.switch.firmware_version` | Software Version from the switch, required for install mode |
 | `network.switch.router_port` | Physical port toward the router. Left unchanged |
 | `network.switch.maas_port` | Physical port toward the server |
 | `network.switch.provisioning_ports` | Physical ports toward machines. At least one in install mode |

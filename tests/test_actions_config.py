@@ -109,6 +109,17 @@ def test_removed_options_cannot_override_fixed_settings(committed, variables):
     assert config.network['provisioning']['dns'] == []
 
 
+def test_removed_switch_metadata_is_not_required_or_embedded(committed, variables):
+    public, private = split_sources(variables)
+    config, _ = resolve_sources(committed, public, private)
+    assert 'firmware_version' not in config.network['switch']
+    public['SWITCH_FIRMWARE_VERSION'] = 'obsolete-public-setting'
+    private['SWITCH_FIRMWARE_VERSION'] = 'obsolete-secret-setting'
+    with_obsolete, statuses = resolve_sources(committed, public, private)
+    assert with_obsolete.canonical_hash == config.canonical_hash
+    assert 'SWITCH_FIRMWARE_VERSION' not in statuses
+
+
 def test_cli_validates_before_writing_and_embeds_effective_config(tmp_path, variables):
     (tmp_path / 'config').mkdir()
     for name in ['network', 'deployment']:

@@ -18,7 +18,6 @@ Open Settings → Secrets and variables → Actions → **Secrets** → New repo
 
 | Secret | Format |
 | --- | --- |
-| `SWITCH_FIRMWARE_VERSION` | string |
 | `SWITCH_ROUTER_PORT` | integer |
 | `SWITCH_MAAS_PORT` | integer |
 | `SWITCH_PROVISIONING_PORTS` | integer-list |

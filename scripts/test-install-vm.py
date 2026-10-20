@@ -54,7 +54,7 @@ def main():
         source = work / 'source'
         shutil.copytree(ROOT, source, ignore=shutil.ignore_patterns('.git', 'build', '__pycache__', '.pytest_cache'))
         config = load_config(source / 'config/network.yaml', source / 'config/deployment.yaml')
-        config.network['switch'].update(firmware_version='virtual-test', router_port=1, maas_port=2, provisioning_ports=[3])
+        config.network['switch'].update(router_port=1, maas_port=2, provisioning_ports=[3])
         config.network['management'].update(interface_mac='52:54:00:12:34:56', address='10.0.2.15/24', gateway='10.0.2.2', dns=['10.0.2.3'], vlan_id=1)
         config.network['provisioning'].update(vlan_id=100, subnet='192.0.2.0/24', controller_address='192.0.2.1', gateway=None, dns=[])
         config.network['provisioning']['dhcp'].update(range_start='192.0.2.100', range_end='192.0.2.200')

@@ -231,7 +231,6 @@ def command_confirm_switch() -> int:
         "phrase_ok": True,
         "config_hash": config.canonical_hash,
         "hardware_revision": revision,
-        "firmware_version": config.network["switch"]["firmware_version"],
         "confirmed_at": datetime.now(timezone.utc).isoformat(),
         "user": os.environ.get("SUDO_USER") or os.environ.get("USER") or "root",
     }

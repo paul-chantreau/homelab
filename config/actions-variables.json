@@ -5,12 +5,6 @@
     "required": true,
     "source": "variable"
   },
-  "SWITCH_FIRMWARE_VERSION": {
-    "path": "network.switch.firmware_version",
-    "type": "string",
-    "required": true,
-    "source": "secret"
-  },
   "SWITCH_ROUTER_PORT": {
     "path": "network.switch.router_port",
     "type": "integer",

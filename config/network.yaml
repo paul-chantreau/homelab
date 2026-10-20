@@ -14,9 +14,8 @@ network:
   switch:
     vendor: netgear
     model: GS724T
-    # This deployment supports only the GS724Tv4.
+    # This deployment assumes a GS724Tv4.
     hardware_revision: GS724Tv4
-    firmware_version: null
     # Physical port numbers taken from the switch web interface. Do not guess.
     router_port: null
     maas_port: null

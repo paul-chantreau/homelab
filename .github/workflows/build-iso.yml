@@ -73,7 +73,6 @@ jobs:
           variables-json: ${{ toJSON(vars) }}
           secrets-json: |
             {
-              "SWITCH_FIRMWARE_VERSION": ${{ toJSON(secrets.SWITCH_FIRMWARE_VERSION) }},
               "SWITCH_ROUTER_PORT": ${{ toJSON(secrets.SWITCH_ROUTER_PORT) }},
               "SWITCH_MAAS_PORT": ${{ toJSON(secrets.SWITCH_MAAS_PORT) }},
               "SWITCH_PROVISIONING_PORTS": ${{ toJSON(secrets.SWITCH_PROVISIONING_PORTS) }},

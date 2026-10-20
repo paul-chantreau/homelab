@@ -36,9 +36,9 @@ UFW is easier for a small setup: deny incoming/routed traffic, allow administrat
 
 Keep the router-facing port out of provisioning, preserve management untagged and provisioning tagged on the MAAS trunk, and keep machine ports untagged with the provisioning PVID. Inspect membership in predefined VLANs as well as the chosen provisioning VLAN.
 
-Use ACL capabilities documented for the exact GS724Tv4 firmware to restrict access to switch management and unwanted flows between ports/VLANs where supported. Confirm the ACL type, direction, binding, rule order and DHCP/broadcast behaviour before applying it. Do not assume a switch ACL is a stateful firewall or that an IP ACL alone filters every Layer-2 path. Avoid changing the administrative access path without a rollback plan and a saved switch configuration.
+Use ACL capabilities documented in the GS724Tv4 administration manual to restrict access to switch management and unwanted flows between ports/VLANs where supported. Confirm the ACL type, direction, binding, rule order and DHCP/broadcast behaviour before applying it. Do not assume a switch ACL is a stateful firewall or that an IP ACL alone filters every Layer-2 path. Avoid changing the administrative access path without a rollback plan and a saved switch configuration.
 
-Reference: the [GS724Tv4 administration manual](https://www.downloads.netgear.com/files/GDC/GS716TV3/GS716Tv3_GS724Tv4_GS748Tv5_SWA_25Sept2013.pdf). Its applicability depends on the hardware revision and installed firmware.
+Reference: the [GS724Tv4 administration manual](https://www.downloads.netgear.com/files/GDC/GS716TV3/GS716Tv3_GS724Tv4_GS748Tv5_SWA_25Sept2013.pdf), matching the fixed GS724Tv4 switch model assumed by this deployment.
 
 ## If inter-VLAN routing is needed later
 

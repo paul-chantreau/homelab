@@ -1,12 +1,28 @@
 """DHCP stays off until validation passes and the operator confirms it."""
 
 from datetime import datetime, timedelta, timezone
+import json
 
 import pytest
 
 from maas_deploy.acceptance import CRITICAL_CHECKS, evaluate
 from maas_deploy.dhcp_gate import activation_phrase, assess_activation, deactivation_phrase
 from maas_deploy.maas_network import PlanError, plan_disable, plan_enable, plan_initial, render_maas_command
+
+
+def test_switch_confirmation_uses_fixed_model_without_version_metadata(ready, tmp_path, monkeypatch):
+    from maas_deploy import cli
+
+    monkeypatch.setattr(cli, '_config', lambda: ready)
+    monkeypatch.setattr(cli, '_state', lambda: tmp_path)
+    monkeypatch.setenv('MAAS_SWITCH_CONFIRM', 'CONFIRM GS724T GS724Tv4 VLAN 100')
+    assert cli.command_confirm_switch() == 0
+    confirmation = json.loads((tmp_path / 'gs724t-confirmation.json').read_text())
+    assert confirmation['hardware_revision'] == 'GS724Tv4'
+    assert 'firmware_version' not in confirmation
+    facts = _facts(ready)
+    facts['switch_confirmation'] = confirmation
+    assert evaluate(ready.network, facts, ready.canonical_hash)['checks']['switch_confirmation']['status'] == 'PASS'
 
 
 def _facts(ready):
