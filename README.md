@@ -5,30 +5,13 @@ This repository builds an Ubuntu Server autoinstall ISO along with Ansible to in
 ## 1. Requirements
 
 One dedicated bare-metal server:
-
-- Ubuntu Server 24.04.5 LTS, installed by the autoinstall ISO.
 - Exactly one physical Ethernet interface. Netplan selects it by MAC address.
-- Enough disk for Ubuntu, PostgreSQL, and MAAS images. The health check reports failure at 80 percent full on `/`.
+- Enough disk space for Ubuntu, PostgreSQL, and MAAS images. The health check reports failure at 80 percent full on `/`.
 - A disk you can identify by serial, WWN, or a `/dev/disk/by-id/` path. The installer never picks the largest disk and never assumes `/dev/sda`.
-- UEFI or legacy BIOS boot from USB. The ISO keeps the Ubuntu El Torito image, protective MBR, and appended EFI partition.
+- UEFI or legacy BIOS boot from USB.
 - Out-of-band or local console access for setup and recovery. The installed account password is locked; normal administrative login uses an SSH public key.
 
-One Netgear GS724Tv4:
-
-- IEEE 802.1Q VLANs, configured only through the web interface.
-- Ports 1–26 (24 copper and 2 SFP), up to 256 VLANs. VLANs 1, 2, and 3 are predefined and cannot be deleted. Ports start as untagged members of those three.
-- VLAN 100 is a valid provisioning VLAN. It is not one of the predefined VLANs.
-- A management web interface reachable from the existing LAN.
-
-Other requirements:
-
-- Fewer than 10 machines to provision.
-- An existing LAN and router. Leave the router's DHCP service and scope alone.
-- No second switch and no remote Ansible controller.
-- Machines that can UEFI network-boot (PXE) on the provisioning ports.
-- Packer, Terraform, Docker, Kubernetes, LXD, and a remote Ansible controller are not part of this design. The MAAS snap may pull optional LXD components; this deployment does not use LXD and does not configure it.
-
-One MAAS controller is a single point of failure. If this server is down, new DHCP, PXE, commissioning, and deployment stop. Machines that were already deployed keep running only to the extent that they no longer need MAAS at runtime. There is no second region or rack controller.
+You will also need an out-of-band or local console access to reach the Netgear GS724Tv4 management web interface on the existing LAN.
 
 ## 2. Architecture overview
 
@@ -131,7 +114,7 @@ These are four different paths:
 | PXE, DHCP, TFTP, and commissioning | Provisioning VLAN only. Machines use the MAAS rack on the provisioning address. They do not need a default route for this |
 | Internet access for a deployed machine | None, while the machine stays on the provisioning VLAN |
 
-For fewer than 10 machines, keep the provisioning VLAN isolated. When a deployed machine needs general network access, change that machine's switch port back to the management LAN in the web interface and give the machine an address that belongs on that LAN. That is a separate change. Do not enable these alternatives unless a later design explicitly approves them:
+Keep the provisioning VLAN isolated. When a deployed machine needs general network access, change that machine's switch port back to the management LAN in the web interface and give the machine an address that belongs on that LAN. That is a separate change. Do not enable these alternatives unless a later design explicitly approves them:
 
 1. Inter-VLAN routing on the existing router. This deployment does not add the provisioning VLAN to the router port.
 2. GS724Tv4 Layer 3 routing. The administration manual documents Routing, VLAN, VLAN Routing Wizard and VLAN Routing. Those pages stay unused.
