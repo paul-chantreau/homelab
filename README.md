@@ -8,7 +8,7 @@ One dedicated bare-metal server:
 
 - Exactly one physical Ethernet interface. Netplan selects it by MAC address.
 - Enough disk space for Ubuntu, PostgreSQL, and MAAS images.
-- A disk you can identify by serial, WWN, or a `/dev/disk/by-id/` path. The installer never picks the largest disk and never assumes `/dev/sda`.
+- A disk you can identify by serial, WWN, or a `/dev/disk/by-id/` path.
 - UEFI or legacy BIOS boot from USB.
 - Out-of-band or local console access for setup and recovery. The installed account password is locked; normal administrative login uses an SSH public key.
 
@@ -16,7 +16,7 @@ You will also need an out-of-band or local console access to reach the Netgear G
 
 ## 2. Network discovery and management settings
 
-Run discovery from a workstation on the existing management LAN. It reads local addresses, routes, and DNS; it does not configure the router, switch, or GitHub settings. A workstation report does not reveal switch VLAN membership or the MAAS server's NIC MAC.
+Run discovery on the existing management LAN.
 
 On Windows PowerShell, from the repository directory:
 
