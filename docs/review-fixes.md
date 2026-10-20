@@ -50,6 +50,8 @@ sudo maas-network-activate --isolation-report /tmp/isolation-report.json
 
 Never interpret zero packets by itself as successful isolation. Initial DHCP clients have no assigned IP; future firewall rules must account for broadcasts and TFTP negotiated flows. No firewall is enabled by this corrective change.
 
+Synchronize the controller, observer and temporary host clocks before starting; correlation compares UTC timestamps from these machines.
+
 ## Backups and restoration
 
 `sudo maas-backup` creates a private `.dump` plus a companion `.config.tar.gz` containing the effective YAML and credential file. Both are mode 0600. Keep a protected off-machine copy; the current Actions configuration intentionally does not enable automatic off-host export.
@@ -77,3 +79,14 @@ They start and remove an isolated PostgreSQL 16 Docker container, with no host p
 The manual **Full ISO installation smoke test** workflow boots the actual customized Ubuntu ISO in an isolated UEFI QEMU guest with synthetic configuration and an ephemeral key. It checks the completed MAAS provisioning, installed helper symlinks, backup, a second Ansible run and recovery after reboot. It never uses installation Secrets and uploads only synthetic-test diagnostics, not the ISO or disk. It needs at least 18 GiB free; KVM is preferred, with TCG fallback.
 
 A completed VM test does not prove physical GS724Tv4 isolation, PXE commissioning/deployment of actual nodes, or recovery onto replacement physical hardware. Report each level separately. Do not infer end-to-end readiness from the unit-test count.
+
+## Official references used
+
+- [Subiquity autoinstall reference, including early-command reload](https://canonical-subiquity.readthedocs-hosted.com/en/latest/reference/autoinstall-reference.html)
+- [Subiquity 24.04.5 disk matching implementation](https://github.com/canonical/subiquity/blob/24.04.5/subiquity/models/filesystem.py)
+- [MAAS installation guidance](https://canonical.com/maas/docs/stable/how-to-guides/get-started/install-maas/)
+- [MAAS 3.7 CLI and API implementation](https://github.com/canonical/maas/tree/3.7)
+- [MAAS network management](https://canonical.com/maas/docs/stable/how-to-guides/manage-networks/)
+- [Pebble service status commands](https://documentation.ubuntu.com/pebble/reference/cli-commands/)
+
+Consulted on 2026-10-20. The generated input metadata also records the pinned Ubuntu ISO checksum and source package versions.

@@ -33,6 +33,12 @@ def test_unusable_settings_fail_before_build(ready, field, value):
         validate(ready, INSTALL_MODE)
 
 
+def test_malformed_ubuntu_settings_report_a_configuration_error(ready):
+    ready.deployment['ubuntu'] = ['not', 'a', 'mapping']
+    with pytest.raises(ConfigError, match='deployment.ubuntu'):
+        validate(ready, INSTALL_MODE)
+
+
 def test_installed_activation_symlink_finds_its_checkout(tmp_path):
     root = Path(__file__).resolve().parents[1]
     command = tmp_path / 'sbin/maas-network-activate'

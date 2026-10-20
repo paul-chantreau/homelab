@@ -351,7 +351,8 @@ def _validate_deployment(deployment: Any, mode: str, errors: list[str]) -> None:
     except (ZoneInfoNotFoundError, ValueError):
         errors.append("deployment.timezone is not an installed IANA timezone")
     input_data = json.loads((Path(__file__).resolve().parents[1] / "config/ubuntu-input-data.json").read_text())
-    if input_data["source_iso_sha256"] != (deployment.get("ubuntu") or {}).get("sha256"):
+    ubuntu = _unknown(deployment.get("ubuntu"), UBUNTU_KEYS, "deployment.ubuntu", errors)
+    if input_data["source_iso_sha256"] != ubuntu.get("sha256"):
         errors.append("Ubuntu input metadata must be regenerated for the selected ISO checksum")
     layout = deployment.get("keyboard_layout")
     if not isinstance(layout, str) or layout not in input_data["layouts"] or variant not in input_data["layouts"].get(layout, []):
@@ -385,7 +386,6 @@ def _validate_deployment(deployment: Any, mode: str, errors: list[str]) -> None:
     disk = _unknown(deployment.get("disk"), DISK_KEYS, "deployment.disk", errors)
     _validate_disk(disk, mode, errors)
 
-    ubuntu = _unknown(deployment.get("ubuntu"), UBUNTU_KEYS, "deployment.ubuntu", errors)
     if ubuntu.get("codename") != "noble" or ubuntu.get("release") != "24.04.5":
         errors.append("deployment.ubuntu must select Ubuntu Server 24.04.5 (noble)")
     if ubuntu.get("iso_name") != "ubuntu-24.04.5-live-server-amd64.iso":
