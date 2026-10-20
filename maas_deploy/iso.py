@@ -99,11 +99,42 @@ def extract_grub(iso_path: Path, work: Path) -> list[tuple[Path, str]]:
 
 
 def inject(source_iso: Path, output_iso: Path, payload: Path, grub_files: list[tuple[Path, str]]) -> None:
+    # Casper checks this manifest during boot. Keep the original entries for
+    # unchanged Ubuntu files and checksum every replacement and added file.
+    with tempfile.TemporaryDirectory(prefix="maas-iso-checksums-") as temporary:
+        manifest = Path(temporary) / "md5sum.txt"
+        subprocess.run(
+            ["xorriso", "-osirrox", "on", "-indev", str(source_iso), "-extract", "/md5sum.txt", str(manifest)],
+            check=True,
+            capture_output=True,
+        )
+        files = {"." + iso_name: local for local, iso_name in grub_files}
+        files.update(
+            {"./maas-deploy/" + local.relative_to(payload).as_posix(): local
+             for local in sorted(payload.rglob("*")) if local.is_file()}
+        )
+        lines = []
+        for line in manifest.read_text(encoding="utf-8").splitlines():
+            parts = line.split(maxsplit=1)
+            if len(parts) != 2 or parts[1].lstrip("*") not in files:
+                lines.append(line)
+        for name, local in sorted(files.items()):
+            digest = hashlib.md5(local.read_bytes(), usedforsecurity=False).hexdigest()
+            lines.append(f"{digest}  {name}")
+        manifest.chmod(0o644)
+        manifest.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        _inject_with_manifest(source_iso, output_iso, payload, grub_files, manifest)
+
+
+def _inject_with_manifest(
+    source_iso: Path, output_iso: Path, payload: Path, grub_files: list[tuple[Path, str]], manifest: Path,
+) -> None:
     if output_iso.exists():
         output_iso.unlink()
     command = ["xorriso", "-indev", str(source_iso), "-outdev", str(output_iso), "-map", str(payload), "/maas-deploy"]
     for local, iso_path_name in grub_files:
         command.extend(["-map", str(local), iso_path_name])
+    command.extend(["-map", str(manifest), "/md5sum.txt"])
     # no_emul_toc keeps the appended EFI partition from overlapping the ISO
     # after files are added. Without it, xorriso can reject an otherwise bootable image.
     command.extend(["-compliance", "no_emul_toc", "-boot_image", "any", "replay"])

@@ -270,6 +270,11 @@ MAAS DHCP enabled automatically on the provisioning VLAN only
 
 Configure the GS724Tv4 VLAN membership and PVIDs in [section 4](#4-vlan-configuration) before booting the installer.
 
+The build updates the ISO's internal `md5sum.txt` for both modified GRUB files
+and the injected deployment files. Ubuntu's boot-time media integrity check
+remains enabled. The downloaded source ISO and the resulting artifact also
+have separate SHA256 checksums.
+
 There is one physical Ethernet port on the server. The management LAN and the provisioning VLAN share that port and the switch port it is plugged into.
 
 ```text
