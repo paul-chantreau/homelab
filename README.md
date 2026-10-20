@@ -6,7 +6,7 @@ This repository builds an Ubuntu Server autoinstall ISO along with Ansible to in
 
 One dedicated bare-metal server:
 - Exactly one physical Ethernet interface. Netplan selects it by MAC address.
-- Enough disk space for Ubuntu, PostgreSQL, and MAAS images. The health check reports failure at 80 percent full on `/`.
+- Enough disk space for Ubuntu, PostgreSQL, and MAAS images.
 - A disk you can identify by serial, WWN, or a `/dev/disk/by-id/` path. The installer never picks the largest disk and never assumes `/dev/sda`.
 - UEFI or legacy BIOS boot from USB.
 - Out-of-band or local console access for setup and recovery. The installed account password is locked; normal administrative login uses an SSH public key.
