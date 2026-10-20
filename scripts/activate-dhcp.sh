@@ -16,21 +16,24 @@ if [[ "$(id -u)" -ne 0 ]]; then
   exit 1
 fi
 
-"${ROOT}/scripts/validate-provisioning-network.sh" "$@"
+if [[ "$#" -ne 0 ]]; then
+  echo "Usage: sudo maas-network-activate" >&2
+  exit 1
+fi
 
-eval "$(python3 - <<'PY'
-from maas_deploy.config import load_config
+DHCP_SETTINGS="$(python3 - <<'PY'
+from maas_deploy.config import INSTALL_MODE, load_config, validate
 import os
 from pathlib import Path
 root = Path(os.environ["MAAS_DEPLOY_ROOT"])
 config = load_config(root / "config/network.yaml", root / "config/deployment.yaml")
+validate(config, INSTALL_MODE)
 network = config.network
-print(f"VLAN_ID={network['provisioning']['vlan_id']}")
-print(f"SUBNET={network['provisioning']['subnet']}")
-print(f"START={network['provisioning']['dhcp']['range_start']}")
-print(f"END={network['provisioning']['dhcp']['range_end']}")
+print(network['provisioning']['vlan_id'], network['provisioning']['subnet'],
+      network['provisioning']['dhcp']['range_start'], network['provisioning']['dhcp']['range_end'])
 PY
 )"
+read -r VLAN_ID SUBNET START END <<< "${DHCP_SETTINGS}"
 
 cat <<EOF
 MAAS DHCP will be enabled only on VLAN ${VLAN_ID}.

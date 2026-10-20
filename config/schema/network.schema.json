@@ -25,7 +25,7 @@
         },
         "provisioning": {
           "type": "object",
-          "required": ["vlan_id", "subnet", "controller_address", "dhcp", "acceptance"],
+          "required": ["vlan_id", "subnet", "controller_address", "dhcp"],
           "additionalProperties": false,
           "properties": {
             "vlan_id": {"type": "integer"},
@@ -39,12 +39,6 @@
                 "range_start": {"type": ["string", "null"]},
                 "range_end": {"type": ["string", "null"]}
               }
-            },
-            "acceptance": {
-              "type": "object",
-              "required": ["test_host"],
-              "additionalProperties": false,
-              "properties": {"test_host": {"type": ["string", "null"]}}
             }
           }
         }

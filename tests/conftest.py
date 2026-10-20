@@ -41,7 +41,6 @@ def ready(committed: LoadedConfig) -> LoadedConfig:
     network["provisioning"]["dhcp"].update(
         {"range_start": "198.51.100.100", "range_end": "198.51.100.200"}
     )
-    network["provisioning"]["acceptance"]["test_host"] = "198.51.100.50"
     deployment["ssh_authorized_keys"] = [PUBLIC_KEY]
     deployment["disk"].update({"serial": "DISKSERIAL1", "confirm_erase": True})
     return LoadedConfig(network=network, deployment=deployment)

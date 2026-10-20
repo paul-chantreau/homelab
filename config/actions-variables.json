@@ -65,12 +65,6 @@
     "required": true,
     "source": "secret"
   },
-  "PROVISIONING_TEST_HOST": {
-    "path": "network.provisioning.acceptance.test_host",
-    "type": "string",
-    "required": true,
-    "source": "secret"
-  },
   "DISK_SERIAL": {
     "path": "deployment.disk.serial",
     "type": "string",

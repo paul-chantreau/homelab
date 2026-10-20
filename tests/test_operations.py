@@ -1,6 +1,5 @@
 """Disk matching, discovery, backups, secrets, and first-boot restart behavior."""
 
-import json
 import os
 import stat
 import subprocess
@@ -10,7 +9,6 @@ from pathlib import Path
 from maas_deploy.backup import select_expired
 from maas_deploy.discovery import assemble, summary
 from maas_deploy.diskmatch import matching_disks
-from maas_deploy.facts import interfaces_from_ip, parse_maas_status
 from maas_deploy.grub import AUTOINSTALL_ARG, patch_grub
 from maas_deploy.postgres_setup import merge_hba, plan
 from maas_deploy.secrets import ensure, load
@@ -38,26 +36,6 @@ def test_discovery_does_not_claim_switch_visibility():
     text = summary(report)
     assert "does not identify Netgear" in text
     assert report["interfaces"][0]["addresses"] == ["192.0.2.20/24"]
-
-
-def test_ip_json_preserves_vlan_id_and_dhcp_offers():
-    interfaces = interfaces_from_ip(
-        json.dumps([{"ifname": "provisioning", "addr_info": [{"family": "inet", "local": "198.51.100.2", "prefixlen": 24}]}]),
-        json.dumps(
-            [
-                {
-                    "ifname": "provisioning",
-                    "address": "52:54:00:12:34:56",
-                    "operstate": "UP",
-                    "linkinfo": {"info_kind": "vlan", "info_data": {"id": 100}},
-                }
-            ]
-        ),
-    )
-    assert interfaces[0]["vlan_id"] == 100
-    status = parse_maas_status("rackd                            RUNNING\nregiond                          RUNNING\ndhcpd                            STOPPED\n")
-    assert status["rack_active"] is True
-    assert status["dhcp_active"] is False
 
 
 def test_postgres_plan_is_idempotent():

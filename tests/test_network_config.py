@@ -42,7 +42,7 @@ def test_every_network_input_is_backed_by_a_required_actions_secret(committed):
                 yield path
 
     network_inputs = {name: spec for name, spec in catalog().items() if spec['path'].startswith('network.')}
-    assert len(network_inputs) == 11
+    assert len(network_inputs) == 10
     assert set(leaves(committed.network, 'network')) == {spec['path'] for spec in network_inputs.values()}
     assert all(spec.get('required') and spec['source'] == 'secret' and 'default' not in spec
                for spec in network_inputs.values())
@@ -55,6 +55,7 @@ def test_every_network_input_is_backed_by_a_required_actions_secret(committed):
     (('provisioning', 'dhcp', 'activate_automatically'), False),
     (('provisioning', 'gateway'), None),
     (('provisioning', 'dns'), []),
+    (('provisioning', 'acceptance'), {'test_host': '198.51.100.50'}),
 ])
 def test_obsolete_fields_are_rejected_by_validator_and_schema(ready, path, value):
     mapping = ready.network

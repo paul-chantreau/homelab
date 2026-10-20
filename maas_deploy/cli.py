@@ -6,16 +6,12 @@ import json
 import os
 import sys
 import subprocess
-from datetime import datetime, timezone
 from pathlib import Path
 
-from maas_deploy.acceptance import evaluate
-from maas_deploy.config import HARDWARE_REVISION, INSTALL_MODE, ConfigError, load_config, validate
-from maas_deploy.dhcp_gate import activation_phrase, assess_activation, deactivation_phrase, emergency_phrase
+from maas_deploy.config import INSTALL_MODE, ConfigError, load_config, validate
 from maas_deploy.iso import build
 from maas_deploy.netplan import render_netplan
-from maas_deploy.maas_network import controller_vlan, plan_disable, plan_enable, render_maas_command
-from maas_deploy.facts import default_route, interfaces_from_ip, parse_maas_status
+from maas_deploy.maas_network import PlanError, controller_vlan, plan_disable, plan_enable, render_maas_command
 from maas_deploy.runtime import SetupError, _run, apply_images, apply_maas, apply_network, apply_postgres, inventory
 from maas_deploy.secrets import load
 
@@ -106,85 +102,18 @@ def command_images() -> int:
     return 0
 
 
-def command_write_validation() -> int:
-    config = _config()
-    validate(config, INSTALL_MODE)
-    facts = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
-    report = evaluate(config.network, facts, config.canonical_hash)
-    report["generated_at"] = datetime.now(timezone.utc).isoformat()
-    destination = _state() / "vlan-validation.json"
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
-    print(f"outcome={report['outcome']}")
-    for name, check in report["checks"].items():
-        print(f"{check['status']:13} {name}: {check['detail']}")
-    if report["outcome"] == "PASS":
-        return 0
-    if report["outcome"] == "INCONCLUSIVE":
-        return 2
-    return 1
-
-
-def _device_from_route(text: str) -> str | None:
-    parts = text.split()
-    if "dev" not in parts:
-        return None
-    return parts[parts.index("dev") + 1]
-
-
-def command_assemble_facts() -> int:
-    """Combine captured command output into the acceptance fact document."""
-    work = Path(sys.argv[2])
-    test_address = (work / "test.address").read_text(encoding="utf-8").strip()
-    facts: dict = {
-        "interfaces": interfaces_from_ip(
-            (work / "address.json").read_text(encoding="utf-8"),
-            (work / "link.json").read_text(encoding="utf-8"),
-        ),
-        "default_route": default_route((work / "route.json").read_text(encoding="utf-8")),
-        "management_gateway": {
-            "reachable": (work / "gateway.ping").read_text(encoding="utf-8").strip() == "yes",
-            "device": _device_from_route((work / "gateway.route").read_text(encoding="utf-8")),
-        },
-        "test_host": {
-            "address": None if test_address in {"", "-"} else test_address,
-            "ping": (work / "test.ping").read_text(encoding="utf-8").strip() == "yes",
-            "arping": (work / "test.arping").read_text(encoding="utf-8").strip() == "yes",
-            "probe": json.loads((work / "test.reverse").read_text(encoding="utf-8")) if (work / "test.reverse").read_text().strip() else {},
-        },
-        "dhcp_capture": json.loads((work / "dhcp.json").read_text(encoding="utf-8")) if (work / "dhcp.json").exists() else {"ran": False},
-        "maas_rack": parse_maas_status((work / "maas-status.txt").read_text(encoding="utf-8")),
-    }
-    isolation = work / "isolation.json"
-    if isolation.exists():
-        facts["isolation_report"] = json.loads(isolation.read_text(encoding="utf-8"))
-    confirmation = _state() / "gs724t-confirmation.json"
-    if confirmation.exists():
-        facts["switch_confirmation"] = json.loads(confirmation.read_text(encoding="utf-8"))
-    (work / "facts.json").write_text(json.dumps(facts, indent=2) + "\n", encoding="utf-8")
-    return 0
-
-
 def _dhcp_change(enabled: bool, phrase: str, emergency: bool = False) -> int:
     config = _config()
     validate(config, INSTALL_MODE)
     vlan_id = int(config.network["provisioning"]["vlan_id"])
     if enabled:
-        expected = activation_phrase(vlan_id)
+        expected = f"ACTIVATE DHCP ON VLAN {vlan_id}"
     elif emergency:
-        expected = emergency_phrase(vlan_id)
+        expected = f"EMERGENCY DEACTIVATE DHCP ON VLAN {vlan_id}"
     else:
-        expected = deactivation_phrase(vlan_id)
+        expected = f"DEACTIVATE DHCP ON VLAN {vlan_id}"
     if phrase != expected:
         return _die("Confirmation did not match. DHCP was not changed.")
-    report_path = _state() / "vlan-validation.json"
-    if enabled:
-        if not report_path.exists():
-            return _die("VLAN validation has not been recorded.")
-        report = json.loads(report_path.read_text(encoding="utf-8"))
-        allowed, reason = assess_activation(report, config.canonical_hash)
-        if not allowed:
-            return _die(f"Refusing to activate DHCP: {reason}")
     profile = config.deployment["maas"]["admin_username"]
     secrets = load(Path("/etc/maas-provision/secrets.env"))
     _run(["maas", "login", profile, "http://127.0.0.1:5240/MAAS/", secrets["MAAS_API_KEY"]])
@@ -203,6 +132,7 @@ def _dhcp_change(enabled: bool, phrase: str, emergency: bool = False) -> int:
         return _die(f"MAAS reports dhcp_on={confirmed} after the change.")
     marker = _state() / "dhcp-active"
     if enabled:
+        marker.parent.mkdir(parents=True, exist_ok=True)
         marker.write_text(f"vlan {vlan_id}\n", encoding="utf-8")
     elif marker.exists():
         marker.unlink()
@@ -217,29 +147,6 @@ def command_dhcp_enable() -> int:
 def command_dhcp_disable() -> int:
     emergency = os.environ.get("MAAS_DHCP_EMERGENCY") == "1"
     return _dhcp_change(False, os.environ.get("MAAS_DHCP_CONFIRM", ""), emergency)
-
-
-def command_confirm_switch() -> int:
-    config = _config()
-    validate(config, INSTALL_MODE)
-    revision = HARDWARE_REVISION
-    vlan_id = int(config.network["provisioning"]["vlan_id"])
-    expected = f"CONFIRM GS724T {revision} VLAN {vlan_id}"
-    if os.environ.get("MAAS_SWITCH_CONFIRM", "") != expected:
-        return _die("Switch confirmation did not match. No record was written.")
-    document = {
-        "phrase_ok": True,
-        "config_hash": config.canonical_hash,
-        "hardware_revision": revision,
-        "confirmed_at": datetime.now(timezone.utc).isoformat(),
-        "user": os.environ.get("SUDO_USER") or os.environ.get("USER") or "root",
-    }
-    path = _state() / "gs724t-confirmation.json"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
-    os.chmod(path, 0o600)
-    print(f"Recorded GS724T confirmation for VLAN {vlan_id}.")
-    return 0
 
 
 def command_build_iso() -> int:
@@ -266,11 +173,8 @@ def main(argv: list[str] | None = None) -> int:
         "healthcheck": command_healthcheck,
         "backup": command_backup,
         "restore": command_restore,
-        "assemble-facts": command_assemble_facts,
-        "write-validation": command_write_validation,
         "dhcp-enable": command_dhcp_enable,
         "dhcp-disable": command_dhcp_disable,
-        "confirm-switch": command_confirm_switch,
         "build-iso": command_build_iso,
     }
     try:
@@ -278,7 +182,7 @@ def main(argv: list[str] | None = None) -> int:
         if handler is None:
             return _die(f"unknown command {args[0]}")
         return handler()
-    except (ConfigError, SetupError, OSError, ValueError, KeyError, subprocess.CalledProcessError) as exc:
+    except (ConfigError, PlanError, SetupError, OSError, ValueError, KeyError, subprocess.CalledProcessError) as exc:
         return _die(str(exc))
 
 

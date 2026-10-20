@@ -89,7 +89,7 @@ def test_disk_placeholder_does_not_authorize_installation(committed, variables):
     ('BACKUP_RETAIN', '0'), ('BACKUP_RETAIN', 'true'),
     ('MANAGEMENT_VLAN_ID', '1.0'), ('MANAGEMENT_DNS', '[]'),
     ('SSH_PUBLIC_KEY', '-----BEGIN OPENSSH PRIVATE KEY-----'),
-    ('PROVISIONING_VLAN_ID', '1'), ('PROVISIONING_TEST_HOST', '198.51.100.110'),
+    ('PROVISIONING_VLAN_ID', '1'),
 ])
 def test_bad_types_and_inconsistent_config_are_rejected(committed, variables, name, value):
     variables[name] = value
@@ -118,6 +118,16 @@ def test_removed_switch_metadata_is_not_required_or_embedded(committed, variable
     with_obsolete, statuses = resolve_sources(committed, public, private)
     assert with_obsolete.canonical_hash == config.canonical_hash
     assert not obsolete.intersection(statuses)
+
+
+def test_obsolete_validation_host_secret_is_ignored(committed, variables):
+    public, private = split_sources(variables)
+    config, _ = resolve_sources(committed, public, private)
+    private['PROVISIONING_TEST_HOST'] = 'obsolete-setting'
+    with_obsolete, statuses = resolve_sources(committed, public, private)
+    assert with_obsolete.canonical_hash == config.canonical_hash
+    assert 'PROVISIONING_TEST_HOST' not in statuses
+    assert 'acceptance' not in with_obsolete.network['provisioning']
 
 
 def test_cli_validates_before_writing_and_embeds_effective_config(tmp_path, variables):

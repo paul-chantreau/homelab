@@ -22,8 +22,6 @@ import yaml
 SCHEMA_MODE = "schema"
 INSTALL_MODE = "install"
 
-# This deployment assumes the GS724Tv4; physical port mapping is operator documentation.
-HARDWARE_REVISION = "GS724Tv4"
 # The v4 manual predefines VLAN 1 (default), VLAN 2 (voice), and VLAN 3 (auto-video).
 RESERVED_PROVISIONING_VLANS = {1, 2, 3}
 VLAN_MAX = 4093
@@ -49,10 +47,8 @@ PROVISIONING_KEYS = {
     "subnet",
     "controller_address",
     "dhcp",
-    "acceptance",
 }
 DHCP_KEYS = {"range_start", "range_end"}
-ACCEPTANCE_KEYS = {"test_host"}
 DEPLOYMENT_KEYS = {
     "hostname",
     "timezone",
@@ -228,19 +224,6 @@ def _validate_network(network: Any, mode: str, errors: list[str]) -> None:
                 errors.append(f"DHCP {label} must not be the subnet or broadcast address")
     if start is not None and end is not None and controller is not None and start <= controller <= end:
         errors.append("the controller address must be outside the dynamic DHCP pool")
-
-    acceptance = _unknown(
-        provisioning.get("acceptance"), ACCEPTANCE_KEYS, "network.provisioning.acceptance", errors
-    )
-    test_host = acceptance.get("test_host")
-    if test_host not in (None, ""):
-        host = _ip(test_host, "network.provisioning.acceptance.test_host", SCHEMA_MODE, errors)
-        if host is not None and provisioning_net is not None and host not in provisioning_net:
-            errors.append("the acceptance test host must be inside the provisioning subnet")
-        if host is not None and start is not None and end is not None and start <= host <= end:
-            errors.append("the acceptance test host must be outside the dynamic DHCP pool")
-        if host is not None and controller is not None and host == controller:
-            errors.append("the acceptance test host must not be the controller address")
 
 
 def _validate_deployment(deployment: Any, mode: str, errors: list[str]) -> None:

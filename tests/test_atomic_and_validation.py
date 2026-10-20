@@ -55,3 +55,4 @@ def test_installed_activation_symlink_finds_its_checkout(tmp_path):
     assert result.returncode != 0  # canonical placeholders are deliberately incomplete
     assert 'required before installation' in result.stderr
     assert 'No such file or directory' not in result.stderr
+    assert 'MAAS DHCP will be enabled' not in result.stdout

@@ -1,78 +1,18 @@
-"""DHCP stays off until validation passes and the operator confirms it."""
+"""DHCP requires explicit confirmation and the configured provisioning topology."""
 
-from datetime import datetime, timedelta, timezone
+import copy
 import json
+import os
+from pathlib import Path
+import shlex
+import subprocess
+import sys
 
 import pytest
+import yaml
 
-from maas_deploy.acceptance import CRITICAL_CHECKS, evaluate
-from maas_deploy.dhcp_gate import activation_phrase, assess_activation, deactivation_phrase
+from maas_deploy import cli
 from maas_deploy.maas_network import PlanError, plan_disable, plan_enable, plan_initial, render_maas_command
-
-
-def test_switch_confirmation_uses_fixed_model_without_version_metadata(ready, tmp_path, monkeypatch):
-    from maas_deploy import cli
-
-    monkeypatch.setattr(cli, '_config', lambda: ready)
-    monkeypatch.setattr(cli, '_state', lambda: tmp_path)
-    monkeypatch.setenv('MAAS_SWITCH_CONFIRM', 'CONFIRM GS724T GS724Tv4 VLAN 100')
-    assert cli.command_confirm_switch() == 0
-    confirmation = json.loads((tmp_path / 'gs724t-confirmation.json').read_text())
-    assert confirmation['hardware_revision'] == 'GS724Tv4'
-    assert 'firmware_version' not in confirmation
-    facts = _facts(ready)
-    facts['switch_confirmation'] = confirmation
-    assert evaluate(ready.network, facts, ready.canonical_hash)['checks']['switch_confirmation']['status'] == 'PASS'
-
-
-def _facts(ready):
-    now = datetime.now(timezone.utc)
-    return {
-        "interfaces": [
-            {
-                "name": "enp1s0",
-                "mac": "52:54:00:12:34:56",
-                "operstate": "UP",
-                "addresses": ["192.0.2.10/24"],
-                "vlan_id": None,
-            },
-            {
-                "name": "provisioning",
-                "mac": "52:54:00:12:34:56",
-                "operstate": "UP",
-                "addresses": ["198.51.100.2/24"],
-                "vlan_id": 100,
-            },
-        ],
-        "default_route": {"via": "192.0.2.1", "device": "enp1s0"},
-        "management_gateway": {"reachable": True, "device": "enp1s0"},
-        "test_host": {
-            "address": "198.51.100.50",
-            "ping": True,
-            "arping": True,
-            "probe": {"verified_broadcast": True, "peer_address": "198.51.100.50",
-                      "broadcast_started_at": (now - timedelta(seconds=20)).isoformat(),
-                      "broadcast_finished_at": (now - timedelta(seconds=18)).isoformat()},
-        },
-        "isolation_report": {
-            "captured_on_maas_server": False,
-            "vlan_id": 100,
-            "observed_host": "198.51.100.50",
-            "seconds": 30,
-            "capture_complete": True,
-            "management_subnet": "192.0.2.0/24",
-            "started_at": (now - timedelta(seconds=40)).isoformat(),
-            "finished_at": (now - timedelta(seconds=10)).isoformat(),
-            "packet_count": 0,
-        },
-        "dhcp_capture": {"ran": True, "capture_complete": True, "seconds": 15, "offer_count": 0, "server_reply_count": 0},
-        "maas_rack": {"present": True, "region_active": True, "rack_active": True, "dhcp_active": False},
-        "switch_confirmation": {
-            "phrase_ok": True,
-            "config_hash": ready.canonical_hash,
-            "confirmed_at": datetime.now(timezone.utc).isoformat(),
-        },
-    }
 
 
 def _inventory():
@@ -101,41 +41,6 @@ def _inventory():
         "ipranges": [{"subnet": {"id": 1}, "type": "dynamic", "start_ip": "198.51.100.100", "end_ip": "198.51.100.200"}],
         "racks": [{"system_id": "rack1"}],
     }
-
-
-def test_passing_validation_is_required_and_expires(ready):
-    report = evaluate(ready.network, _facts(ready), ready.canonical_hash)
-    assert report["outcome"] == "PASS"
-    assert report["blocks_dhcp"] is False
-    report["generated_at"] = datetime.now(timezone.utc).isoformat()
-    allowed, _reason = assess_activation(report, ready.canonical_hash)
-    assert allowed is True
-    stale = dict(report)
-    stale["generated_at"] = (datetime.now(timezone.utc) - timedelta(hours=3)).isoformat()
-    allowed, reason = assess_activation(stale, ready.canonical_hash)
-    assert allowed is False
-    assert "older" in reason
-
-
-def test_inconclusive_isolation_blocks_dhcp(ready):
-    facts = _facts(ready)
-    del facts["isolation_report"]
-    report = evaluate(ready.network, facts, ready.canonical_hash)
-    assert report["outcome"] == "INCONCLUSIVE"
-    assert report["checks"]["vlan_isolation"]["status"] == "INCONCLUSIVE"
-    report["generated_at"] = datetime.now(timezone.utc).isoformat()
-    allowed, reason = assess_activation(report, ready.canonical_hash)
-    assert allowed is False
-    assert "INCONCLUSIVE" in reason
-
-
-def test_unexpected_dhcp_and_leaked_vlan_fail(ready):
-    facts = _facts(ready)
-    facts["dhcp_capture"].update(offer_count=1, server_reply_count=1)
-    facts["isolation_report"]["packet_count"] = 2
-    report = evaluate(ready.network, facts, ready.canonical_hash)
-    assert report["outcome"] == "FAIL"
-    assert set(report["checks"]) == set(CRITICAL_CHECKS)
 
 
 def test_initial_plan_disables_management_dhcp_and_does_not_enable_provisioning(ready):
@@ -174,8 +79,6 @@ def test_enable_and_disable_target_only_the_provisioning_vlan(ready):
         "dhcp_on=true",
         "primary_rack=rack1",
     ]
-    assert activation_phrase(100) == "ACTIVATE DHCP ON VLAN 100"
-    assert deactivation_phrase(100) == "DEACTIVATE DHCP ON VLAN 100"
     disabled = plan_disable(ready.network, _inventory())
     assert render_maas_command("admin", disabled[0])[-1] == "dhcp_on=false"
     assert "100" in render_maas_command("admin", disabled[0])
@@ -186,3 +89,148 @@ def test_enable_refuses_a_missing_rack(ready):
     inventory["racks"] = []
     with pytest.raises(PlanError):
         plan_enable(ready.network, inventory)
+
+
+@pytest.fixture
+def dhcp_cli(ready, tmp_path, monkeypatch):
+    current = _inventory()
+    state = tmp_path / 'state'
+    calls = []
+
+    def run(command):
+        calls.append(command)
+        if 'dhcp_on=true' in command:
+            current['vlans'][0]['dhcp_on'] = True
+        elif 'dhcp_on=false' in command:
+            current['vlans'][0]['dhcp_on'] = False
+
+    monkeypatch.setattr(cli, '_config', lambda: ready)
+    monkeypatch.setattr(cli, '_state', lambda: state)
+    monkeypatch.setattr(cli, 'load', lambda _: {'MAAS_API_KEY': 'consumer:token:secret'})
+    monkeypatch.setattr(cli, '_run', run)
+    monkeypatch.setattr(cli, 'inventory', lambda _: copy.deepcopy(current))
+    return calls, current, state
+
+
+@pytest.mark.parametrize('old_report', [False, True])
+def test_activation_needs_no_validation_report(dhcp_cli, monkeypatch, old_report):
+    calls, current, state = dhcp_cli
+    if old_report:
+        state.mkdir()
+        (state / 'vlan-validation.json').write_text('obsolete, unreadable report')
+    monkeypatch.setenv('MAAS_DHCP_CONFIRM', 'ACTIVATE DHCP ON VLAN 100')
+
+    assert cli.main(['dhcp-enable']) == 0
+    assert (state / 'dhcp-active').read_text() == 'vlan 100\n'
+    assert calls[1:] == [
+        ['maas', 'admin', 'vlan', 'update', '1', '100', 'dhcp_on=true', 'primary_rack=rack1']
+    ]
+    assert current['vlans'][1]['dhcp_on'] is True  # management VLAN is untouched
+
+
+@pytest.mark.parametrize('command,phrase', [
+    ('dhcp-enable', ''),
+    ('dhcp-enable', 'ACTIVATE DHCP ON VLAN 1'),
+    ('dhcp-disable', 'ACTIVATE DHCP ON VLAN 100'),
+])
+def test_missing_or_wrong_confirmation_changes_nothing(dhcp_cli, monkeypatch, command, phrase):
+    calls, _, state = dhcp_cli
+    monkeypatch.setenv('MAAS_DHCP_CONFIRM', phrase)
+    assert cli.main([command]) == 1
+    assert calls == []
+    assert not state.exists()
+
+
+@pytest.mark.parametrize('defect', ['no-rack', 'wrong-mac', 'wrong-parent', 'wrong-subnet', 'unmanaged', 'no-range'])
+def test_activation_refuses_inconsistent_maas_inventory(dhcp_cli, monkeypatch, capsys, defect):
+    calls, current, state = dhcp_cli
+    if defect == 'no-rack':
+        current['racks'] = []
+    elif defect == 'wrong-mac':
+        current['interfaces'][0]['mac_address'] = '52:54:00:00:00:01'
+    elif defect == 'wrong-parent':
+        current['interfaces'][1]['parents'] = ['other0']
+    elif defect == 'wrong-subnet':
+        current['subnets'][0]['vlan']['id'] = 11
+    elif defect == 'unmanaged':
+        current['subnets'][0]['managed'] = False
+    else:
+        current['ipranges'] = []
+    monkeypatch.setenv('MAAS_DHCP_CONFIRM', 'ACTIVATE DHCP ON VLAN 100')
+
+    assert cli.main(['dhcp-enable']) == 1
+    assert len(calls) == 1 and calls[0][:2] == ['maas', 'login']
+    assert not (state / 'dhcp-active').exists()
+    assert capsys.readouterr().err
+
+
+def test_invalid_configuration_cannot_activate_dhcp(ready, dhcp_cli, monkeypatch):
+    calls, _, state = dhcp_cli
+    ready.network['provisioning']['vlan_id'] = ready.network['management']['vlan_id']
+    monkeypatch.setenv('MAAS_DHCP_CONFIRM', 'ACTIVATE DHCP ON VLAN 1')
+    assert cli.main(['dhcp-enable']) == 1
+    assert calls == []
+    assert not state.exists()
+
+
+def test_failed_maas_enable_does_not_record_success(dhcp_cli, monkeypatch):
+    calls, _, state = dhcp_cli
+    monkeypatch.setattr(cli, '_run', lambda command: calls.append(command))
+    monkeypatch.setenv('MAAS_DHCP_CONFIRM', 'ACTIVATE DHCP ON VLAN 100')
+    assert cli.main(['dhcp-enable']) == 1
+    assert not (state / 'dhcp-active').exists()
+
+
+@pytest.mark.parametrize('emergency', [False, True])
+def test_deactivation_still_works_without_reports(dhcp_cli, monkeypatch, emergency):
+    calls, current, state = dhcp_cli
+    current['vlans'][0]['dhcp_on'] = True
+    state.mkdir()
+    (state / 'dhcp-active').touch()
+    monkeypatch.setenv('MAAS_DHCP_EMERGENCY', '1' if emergency else '0')
+    monkeypatch.setenv('MAAS_DHCP_CONFIRM', ('EMERGENCY ' if emergency else '') + 'DEACTIVATE DHCP ON VLAN 100')
+
+    assert cli.main(['dhcp-disable']) == 0
+    assert not (state / 'dhcp-active').exists()
+    assert calls[1:] == [['maas', 'admin', 'vlan', 'update', '1', '100', 'dhcp_on=false']]
+    assert current['vlans'][1]['dhcp_on'] is True
+
+
+@pytest.mark.parametrize('extra_args', [[], ['--isolation-report', 'obsolete.json']])
+def test_activation_wrapper_only_needs_the_confirmation(ready, tmp_path, extra_args):
+    root = Path(__file__).resolve().parents[1]
+    config_dir = tmp_path / 'config'
+    config_dir.mkdir()
+    (config_dir / 'network.yaml').write_text(yaml.safe_dump({'network': ready.network}))
+    (config_dir / 'deployment.yaml').write_text(yaml.safe_dump({'deployment': ready.deployment}))
+    bindir = tmp_path / 'bin'
+    bindir.mkdir()
+    (bindir / 'id').write_text('#!/bin/sh\necho 0\n')
+    (bindir / 'id').chmod(0o755)
+    record = tmp_path / 'invocation.json'
+    python = bindir / 'python3'
+    record_command = (
+        'import json, os, sys; from pathlib import Path; '
+        'Path(os.environ["INVOCATION_RECORD"]).write_text('
+        'json.dumps([sys.argv[1:], os.environ.get("MAAS_DHCP_CONFIRM")]))'
+    )
+    python.write_text(
+        '#!/bin/bash\n'
+        f'if [[ "$1" == "-" ]]; then exec {shlex.quote(sys.executable)} "$@"; fi\n'
+        f'exec {shlex.quote(sys.executable)} -c {shlex.quote(record_command)} "$@"\n'
+    )
+    python.chmod(0o755)
+    command = bindir / 'maas-network-activate'
+    command.symlink_to(root / 'scripts/activate-dhcp.sh')
+    env = {**os.environ, 'MAAS_DEPLOY_ROOT': str(tmp_path), 'INVOCATION_RECORD': str(record),
+           'PATH': str(bindir) + ':' + os.environ['PATH']}
+    result = subprocess.run(['bash', str(command), *extra_args], cwd=root, env=env,
+                            input='ACTIVATE DHCP ON VLAN 100\n', capture_output=True, text=True)
+
+    if extra_args:
+        assert result.returncode == 1 and 'Usage:' in result.stderr
+        assert not record.exists()
+    else:
+        assert result.returncode == 0, result.stderr
+        assert 'Dynamic range: 198.51.100.100 - 198.51.100.200' in result.stdout
+        assert json.loads(record.read_text()) == [['-m', 'maas_deploy', 'dhcp-enable'], 'ACTIVATE DHCP ON VLAN 100']

@@ -34,7 +34,6 @@ jobs:
               "PROVISIONING_CONTROLLER_ADDRESS": ${{ toJSON(secrets.PROVISIONING_CONTROLLER_ADDRESS) }},
               "PROVISIONING_DHCP_START": ${{ toJSON(secrets.PROVISIONING_DHCP_START) }},
               "PROVISIONING_DHCP_END": ${{ toJSON(secrets.PROVISIONING_DHCP_END) }},
-              "PROVISIONING_TEST_HOST": ${{ toJSON(secrets.PROVISIONING_TEST_HOST) }},
               "DISK_SERIAL": ${{ toJSON(secrets.DISK_SERIAL) }},
               "DISK_WWN": ${{ toJSON(secrets.DISK_WWN) }},
               "DISK_BY_ID": ${{ toJSON(secrets.DISK_BY_ID) }}

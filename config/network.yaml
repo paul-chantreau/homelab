@@ -25,6 +25,3 @@ network:
       # DHCP stays disabled until maas-network-activate is confirmed.
       range_start: null
       range_end: null
-    acceptance:
-      # Static address of the temporary host used to test a provisioning port.
-      test_host: null

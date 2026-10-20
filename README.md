@@ -102,7 +102,7 @@ Optionally copy this worksheet and fill in the physical port numbers:
 
 `MANAGEMENT_INTERFACE_MAC` identifies the server NIC connected to its chosen switch port; it is not a switch-port identifier. Apply the membership/PVID choices in [section 4](#4-vlan-configuration).
 
-After controller installation, `sudo maas-network-confirm-switch` prints the required membership and PVID by role using these VLAN Secrets. Inspect the actual connected ports in the switch UI before confirming. The worksheet itself is optional.
+Use the membership and PVID instructions in [section 4](#4-vlan-configuration) for these physical ports. The worksheet itself is optional.
 
 ## 4. VLAN configuration
 
@@ -115,11 +115,10 @@ Choose the provisioning network, save its **repository Actions Secrets**, then c
 | `PROVISIONING_CONTROLLER_ADDRESS` | The MAAS server's host IPv4 address inside `PROVISIONING_SUBNET`, outside the DHCP pool. Enter the IP without a prefix. |
 | `PROVISIONING_DHCP_START` | First dynamic IPv4 address inside `PROVISIONING_SUBNET`. |
 | `PROVISIONING_DHCP_END` | Last dynamic IPv4 address in that subnet; it must be greater than `PROVISIONING_DHCP_START`. |
-| `PROVISIONING_TEST_HOST` | Static IPv4 address for the temporary wired validation host, inside the subnet, outside the DHCP pool, and different from `PROVISIONING_CONTROLLER_ADDRESS`. |
 
-Keep the controller, test host, and DHCP endpoints away from the subnet and broadcast addresses. The provisioning VLAN stays isolated: the server does not forward packets, no provisioning gateway is configured, and MAAS DHCP starts disabled.
+Keep the controller and DHCP endpoints away from the subnet and broadcast addresses. The provisioning VLAN stays isolated: the server does not forward packets, no provisioning gateway is configured, and MAAS DHCP starts disabled.
 
-The instructions below use **100 to mean the value saved in `PROVISIONING_VLAN_ID`**. Substitute your chosen value throughout if it differs. The management VLAN means `MANAGEMENT_VLAN_ID`. A passing Ubuntu VLAN interface does not prove the switch pages are correct.
+The instructions below use **100 to mean the value saved in `PROVISIONING_VLAN_ID`**. Substitute your chosen value throughout if it differs. The management VLAN means `MANAGEMENT_VLAN_ID`.
 
 Membership letters:
 
@@ -186,7 +185,7 @@ Configure **repository-level** settings on GitHub under **Settings → Secrets a
 - In **Secrets**, select **New repository secret** for entries marked Secret.
 - In **Variables**, select **New repository variable** for entries marked Variable.
 
-Use the names exactly as written. Network topology and disk identity must be Secrets; putting them in Variables does not satisfy validation. `SSH_PUBLIC_KEY` is a Variable. Optional Variables may be omitted: the checker applies their defaults automatically. All 11 network Secrets are required without defaults, including both VLAN IDs. Documentation examples are not saved values.
+Use the names exactly as written. Network topology and disk identity must be Secrets; putting them in Variables does not satisfy validation. `SSH_PUBLIC_KEY` is a Variable. Optional Variables may be omitted: the checker applies their defaults automatically. All 10 network Secrets are required without defaults, including both VLAN IDs. Documentation examples are not saved values.
 
 | Name | GitHub storage | Description / value to enter | Required | Default value |
 | --- | --- | --- | --- | --- |
@@ -201,7 +200,6 @@ Use the names exactly as written. Network topology and disk identity must be Sec
 | `PROVISIONING_CONTROLLER_ADDRESS` | Secret | Server IPv4 address on the provisioning subnet, without a prefix and outside the DHCP pool. | Yes | None |
 | `PROVISIONING_DHCP_START` | Secret | First dynamic IPv4 address in the provisioning subnet. | Yes | None |
 | `PROVISIONING_DHCP_END` | Secret | Last dynamic IPv4 address in the provisioning subnet; greater than the start address. | Yes | None |
-| `PROVISIONING_TEST_HOST` | Secret | Temporary wired validation host IPv4 address in the provisioning subnet, outside the pool and different from the controller. | Yes | None |
 | `DISK_SERIAL` | Secret | Target disk short serial reported by `lsblk`; copy it exactly. | At least one disk ID | None |
 | `DISK_WWN` | Secret | Target disk WWN reported by `lsblk`. | At least one disk ID | None |
 | `DISK_BY_ID` | Secret | Target disk stable path starting with `/dev/disk/by-id/`. | At least one disk ID | None |
@@ -270,7 +268,7 @@ PostgreSQL 16 + MAAS 3.7 region+rack
 DHCP remains disabled
     |
     v
-on-site GS724T web configuration and VLAN acceptance
+on-site GS724T web configuration
     |
     v
 explicit MAAS DHCP activation on the provisioning VLAN only
@@ -359,33 +357,23 @@ Using balenaEtcher on Windows, macOS, or Linux:
 2. Select the USB drive ;
 3. Flash.
 
-## 8. Validating the VLAN
+## 8. Activating MAAS DHCP
 
-After the physical switch configuration and controller installation, validate the VLAN using a separate wired management observer and a temporary provisioning host statically configured with the `PROVISIONING_TEST_HOST` Secret address, Python 3 and `iputils-arping`. The observer needs the checkout's helper/package, `ip` and `tcpdump`.
-
-The controller checks interface MAC/link/address/routes, bidirectional connectivity, actual VLAN ID, a fresh switch confirmation, a complete DHCP capture, and a management capture covering a one-use-token broadcast probe. Failed/short/stale captures, incorrect observer networks and missing evidence give FAIL or INCONCLUSIVE, never an empty PASS. A successful test establishes the observed broadcast behaviour for this configuration, not every possible network-security property.
-
-Run `sudo maas-network-confirm-switch` only after inspecting VLAN membership and PVID in the switch UI. This confirmation is valid for 24 hours and the current configuration hash. Use `sudo maas-network-validate --isolation-report /tmp/isolation-report.json` for validation only, or use activation directly as described below. The script prints the temporary host's exact command, including a fresh `--token`, then waits for the matching completed observer report.
-
-Validation is written to `/var/lib/maas-provision/vlan-validation.json`. Activation requires all critical checks to PASS, a matching configuration hash and a report less than two hours old. The underlying capture/probe must be correlated and less than five minutes old when validation runs.
-
-## 9. Activating MAAS DHCP
-
-Activation is phase B. Phase A has already installed MAAS and configured the range with DHCP left off.
+After installing the controller and configuring the switch as described in [section 4](#4-vlan-configuration), activate DHCP on the provisioning VLAN. Installation configures the address pool with DHCP left off.
 
 ```bash
-sudo maas-network-activate --isolation-report /path/to/isolation-report.json
+sudo maas-network-activate
 ```
 
-The command repeats the validation in [section 8](#8-validating-the-vlan). A `FAIL` or `INCONCLUSIVE` result stops the script before the prompt. On success it prints `PROVISIONING_VLAN_ID`, `PROVISIONING_SUBNET`, and the `PROVISIONING_DHCP_START`–`PROVISIONING_DHCP_END` range, and it states that the management VLAN and the router DHCP service are not changed. Type:
+The command prints `PROVISIONING_VLAN_ID`, `PROVISIONING_SUBNET`, and the `PROVISIONING_DHCP_START`–`PROVISIONING_DHCP_END` range. It uses the installed configuration and requires no temporary host or capture report. Type:
 
 ```text
 ACTIVATE DHCP ON VLAN 100
 ```
 
-Use the `PROVISIONING_VLAN_ID` value it prints if it differs from this example of 100. The command then runs `maas <profile> vlan update <fabric-id> <vlan-id> dhcp_on=true primary_rack=<system-id>` for the provisioning VLAN only. It checks `maas status` afterward and writes `/var/lib/maas-provision/dhcp-active` when `dhcpd` is running.
+Use the `PROVISIONING_VLAN_ID` value it prints if it differs from this example of 100. The command verifies the rack controller's interface, provisioning VLAN, managed subnet, and configured dynamic range in MAAS before enabling DHCP. It checks that MAAS reports DHCP enabled on that VLAN afterward and writes `/var/lib/maas-provision/dhcp-active`. It leaves the management VLAN and the router DHCP service unchanged. Physical switch membership and PVIDs remain your responsibility; activation does not test broadcast isolation.
 
-Emergency stop, including when you cannot complete a fresh validation:
+Emergency stop:
 
 ```bash
 sudo maas-network-deactivate --emergency
@@ -401,7 +389,7 @@ The ordinary stop is `sudo maas-network-deactivate` and the phrase `DEACTIVATE D
 
 If activation fails, leave DHCP off, read `/var/log/maas-provision/`, and run `sudo maas status`. Do not widen the range onto the management subnet to "make PXE work".
 
-## 10. Accessing the MAAS interface
+## 9. Accessing the MAAS interface
 
 From a browser on the management LAN, use the IPv4 part of the `MANAGEMENT_ADDRESS` Secret (omit its `/prefix`):
 
@@ -417,12 +405,12 @@ After login, confirm:
 
 - Controllers: one controller, both region and rack.
 - Subnets: `PROVISIONING_SUBNET`, with `PROVISIONING_CONTROLLER_ADDRESS` reserved and the dynamic range matching `PROVISIONING_DHCP_START`–`PROVISIONING_DHCP_END`.
-- VLANs: DHCP enabled only after [section 9](#9-activating-maas-dhcp), and only on the provisioning VLAN.
+- VLANs: DHCP enabled only after [section 8](#8-activating-maas-dhcp), and only on the provisioning VLAN.
 - Images: Ubuntu Noble present and synced. `maas-images` records success in `/var/lib/maas-provision/images-synced`.
 
 The controller itself reaches the image mirror through the management default route. Commissioning machines reach the downloaded images through the rack controller on the provisioning VLAN.
 
-## 11. First PXE deployment
+## 10. First PXE deployment
 
 1. Connect the test machine to a provisioning port chosen in [section 3](#3-physical-port-mapping). That port must be untagged in `PROVISIONING_VLAN_ID`, with the same value as its PVID.
 2. In the machine firmware, enable UEFI network boot and put it first.

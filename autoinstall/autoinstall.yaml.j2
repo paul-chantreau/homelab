@@ -49,13 +49,11 @@ autoinstall:
     - ansible
     - openssh-client
     - curl
-    - iputils-arping
     - iputils-ping
     - jq
     - postgresql
     - postgresql-client
     - python3-yaml
-    - tcpdump
     - vlan
   early-commands:
     - python3 /cdrom/maas-deploy/scripts/preinstall-check.py --network /cdrom/maas-deploy/config/network.yaml --deployment /cdrom/maas-deploy/config/deployment.yaml --autoinstall /autoinstall.yaml
@@ -66,8 +64,6 @@ autoinstall:
     - install -m 0644 /cdrom/maas-deploy/systemd/maas-firstboot.service /target/etc/systemd/system/maas-firstboot.service
     - ln -sfn /opt/maas-deploy/scripts/activate-dhcp.sh /target/usr/local/sbin/maas-network-activate
     - ln -sfn /opt/maas-deploy/scripts/deactivate-dhcp.sh /target/usr/local/sbin/maas-network-deactivate
-    - ln -sfn /opt/maas-deploy/scripts/validate-provisioning-network.sh /target/usr/local/sbin/maas-network-validate
-    - ln -sfn /opt/maas-deploy/scripts/confirm-switch.sh /target/usr/local/sbin/maas-network-confirm-switch
     - ln -sfn /opt/maas-deploy/scripts/healthcheck.sh /target/usr/local/sbin/maas-healthcheck
     - ln -sfn /opt/maas-deploy/scripts/backup-maas.sh /target/usr/local/sbin/maas-backup
     - ln -sfn /opt/maas-deploy/scripts/restore-maas.sh /target/usr/local/sbin/maas-restore

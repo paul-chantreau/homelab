@@ -6,13 +6,11 @@
       - ca-certificates
       - openssh-client
       - curl
-      - iputils-arping
       - iputils-ping
       - jq
       - python3-jinja2
       - python3-yaml
       - rsync
-      - tcpdump
       - unattended-upgrades
       - vlan
     state: present
