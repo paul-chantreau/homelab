@@ -82,7 +82,6 @@ def resolve(base: LoadedConfig, variables: dict[str, Any], secrets: dict[str, An
     # still requires exactly one matching physical disk before partitioning.
     document['deployment']['disk'].update(model=None, confirm_erase=True)
     document['deployment']['backup']['offhost_target'] = None
-    document['network']['provisioning'].update(gateway=None, dns=[])
     config = LoadedConfig(**document)
     validate(config, INSTALL_MODE)
     return config, statuses

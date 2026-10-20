@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from maas_deploy.acceptance import evaluate
-from maas_deploy.config import INSTALL_MODE, ConfigError, load_config, validate
+from maas_deploy.config import HARDWARE_REVISION, INSTALL_MODE, ConfigError, load_config, validate
 from maas_deploy.dhcp_gate import activation_phrase, assess_activation, deactivation_phrase, emergency_phrase
 from maas_deploy.iso import build
 from maas_deploy.netplan import render_netplan
@@ -222,7 +222,7 @@ def command_dhcp_disable() -> int:
 def command_confirm_switch() -> int:
     config = _config()
     validate(config, INSTALL_MODE)
-    revision = config.network["switch"]["hardware_revision"]
+    revision = HARDWARE_REVISION
     vlan_id = int(config.network["provisioning"]["vlan_id"])
     expected = f"CONFIRM GS724T {revision} VLAN {vlan_id}"
     if os.environ.get("MAAS_SWITCH_CONFIRM", "") != expected:

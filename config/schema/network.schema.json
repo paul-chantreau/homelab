@@ -8,32 +8,9 @@
   "properties": {
     "network": {
       "type": "object",
-      "required": ["mode", "routing", "switch", "management", "provisioning"],
+      "required": ["management", "provisioning"],
       "additionalProperties": false,
       "properties": {
-        "mode": {"const": "vlan"},
-        "routing": {
-          "type": "object",
-          "required": ["decision", "ubuntu_nat"],
-          "additionalProperties": false,
-          "properties": {
-            "decision": {"const": "isolated"},
-            "ubuntu_nat": {"const": false}
-          }
-        },
-        "switch": {
-          "type": "object",
-          "required": ["vendor", "model", "hardware_revision", "router_port", "maas_port", "provisioning_ports"],
-          "additionalProperties": false,
-          "properties": {
-            "vendor": {"const": "netgear"},
-            "model": {"const": "GS724T"},
-            "hardware_revision": {"const": "GS724Tv4"},
-            "router_port": {"type": ["integer", "null"]},
-            "maas_port": {"type": ["integer", "null"]},
-            "provisioning_ports": {"type": "array", "items": {"type": "integer"}}
-          }
-        },
         "management": {
           "type": "object",
           "required": ["interface_mac", "address", "gateway", "dns", "vlan_id"],
@@ -48,7 +25,7 @@
         },
         "provisioning": {
           "type": "object",
-          "required": ["vlan_id", "subnet", "controller_address", "dhcp", "gateway", "dns", "acceptance"],
+          "required": ["vlan_id", "subnet", "controller_address", "dhcp", "acceptance"],
           "additionalProperties": false,
           "properties": {
             "vlan_id": {"type": "integer"},
@@ -56,16 +33,13 @@
             "controller_address": {"type": ["string", "null"]},
             "dhcp": {
               "type": "object",
-              "required": ["activate_automatically", "range_start", "range_end"],
+              "required": ["range_start", "range_end"],
               "additionalProperties": false,
               "properties": {
-                "activate_automatically": {"const": false},
                 "range_start": {"type": ["string", "null"]},
                 "range_end": {"type": ["string", "null"]}
               }
             },
-            "gateway": {"type": ["string", "null"]},
-            "dns": {"type": "array", "items": {"type": "string"}},
             "acceptance": {
               "type": "object",
               "required": ["test_host"],

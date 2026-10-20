@@ -22,16 +22,14 @@ import yaml
 SCHEMA_MODE = "schema"
 INSTALL_MODE = "install"
 
-# This deployment supports only the GS724Tv4. Ports 1–26 cover 24 copper ports and 2 SFP ports.
+# This deployment assumes the GS724Tv4; physical port mapping is operator documentation.
 HARDWARE_REVISION = "GS724Tv4"
-PORT_MAX = 26
 # The v4 manual predefines VLAN 1 (default), VLAN 2 (voice), and VLAN 3 (auto-video).
 RESERVED_PROVISIONING_VLANS = {1, 2, 3}
 VLAN_MAX = 4093
 MAAS_CHANNEL = "3.7/stable"
 MAAS_MODE = "region+rack"
 POSTGRES_MAJOR = 16
-ROUTING_DECISION = "isolated"
 
 _MAC = re.compile(r"^([0-9a-f]{2}:){5}[0-9a-f]{2}$")
 _HOSTNAME = re.compile(r"^(?=.{1,63}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
@@ -44,27 +42,16 @@ _SSH_PUBLIC = re.compile(
 _PRIVATE_KEY = re.compile(r"BEGIN [A-Z ]*PRIVATE KEY")
 _BY_ID = re.compile(r"^/dev/disk/by-id/[A-Za-z0-9._+-]+$")
 
-NETWORK_KEYS = {"mode", "routing", "switch", "management", "provisioning"}
-ROUTING_KEYS = {"decision", "ubuntu_nat"}
-SWITCH_KEYS = {
-    "vendor",
-    "model",
-    "hardware_revision",
-    "router_port",
-    "maas_port",
-    "provisioning_ports",
-}
+NETWORK_KEYS = {"management", "provisioning"}
 MANAGEMENT_KEYS = {"interface_mac", "address", "gateway", "dns", "vlan_id"}
 PROVISIONING_KEYS = {
     "vlan_id",
     "subnet",
     "controller_address",
     "dhcp",
-    "gateway",
-    "dns",
     "acceptance",
 }
-DHCP_KEYS = {"activate_automatically", "range_start", "range_end"}
+DHCP_KEYS = {"range_start", "range_end"}
 ACCEPTANCE_KEYS = {"test_host"}
 DEPLOYMENT_KEYS = {
     "hostname",
@@ -176,52 +163,6 @@ def _require(mapping: dict[str, Any], key: str, location: str, errors: list[str]
 
 def _validate_network(network: Any, mode: str, errors: list[str]) -> None:
     network = _unknown(network, NETWORK_KEYS, "network", errors)
-    if network.get("mode") != "vlan":
-        errors.append(
-            "network.mode must be 'vlan'. A shared LAN is not selected automatically "
-            "and requires a separately approved DHCP migration plan"
-        )
-    routing = _unknown(network.get("routing"), ROUTING_KEYS, "network.routing", errors)
-    if routing.get("decision") != ROUTING_DECISION:
-        errors.append(
-            "network.routing.decision must be 'isolated'. Router, switch Layer-3, "
-            "and Ubuntu NAT paths are documented but not enabled by this deployment"
-        )
-    if routing.get("ubuntu_nat") is not False:
-        errors.append("network.routing.ubuntu_nat must be false")
-
-    switch = _unknown(network.get("switch"), SWITCH_KEYS, "network.switch", errors)
-    if switch.get("vendor") != "netgear":
-        errors.append("network.switch.vendor must be 'netgear'")
-    if str(switch.get("model", "")).upper() != "GS724T":
-        errors.append("network.switch.model must be 'GS724T'")
-    revision = switch.get("hardware_revision")
-    if revision != HARDWARE_REVISION:
-        errors.append("network.switch.hardware_revision must be 'GS724Tv4'")
-
-    router = _port(switch.get("router_port"), "network.switch.router_port", PORT_MAX, mode, errors)
-    maas = _port(switch.get("maas_port"), "network.switch.maas_port", PORT_MAX, mode, errors)
-    provisioning_ports = switch.get("provisioning_ports")
-    parsed_ports: list[int] = []
-    if not isinstance(provisioning_ports, list):
-        errors.append("network.switch.provisioning_ports must be a list")
-    else:
-        if mode == INSTALL_MODE and not provisioning_ports:
-            errors.append("network.switch.provisioning_ports must name at least one port")
-        for index, port in enumerate(provisioning_ports):
-            parsed = _port(
-                port,
-                f"network.switch.provisioning_ports[{index}]",
-                PORT_MAX,
-                INSTALL_MODE,
-                errors,
-            )
-            if parsed is not None:
-                parsed_ports.append(parsed)
-    assigned = [port for port in (router, maas, *parsed_ports) if port is not None]
-    if len(assigned) != len(set(assigned)):
-        errors.append("switch port roles must be unique across router, MAAS, and provisioning ports")
-
     management = _unknown(network.get("management"), MANAGEMENT_KEYS, "network.management", errors)
     mac = management.get("interface_mac")
     if mac not in (None, ""):
@@ -273,11 +214,6 @@ def _validate_network(network: Any, mode: str, errors: list[str]) -> None:
         errors.append("management and provisioning subnets must not overlap")
 
     dhcp = _unknown(provisioning.get("dhcp"), DHCP_KEYS, "network.provisioning.dhcp", errors)
-    if dhcp.get("activate_automatically") is not False:
-        errors.append(
-            "network.provisioning.dhcp.activate_automatically must be false. "
-            "DHCP is enabled only by maas-network-activate after validation"
-        )
     start = _ip(dhcp.get("range_start"), "network.provisioning.dhcp.range_start", mode, errors)
     end = _ip(dhcp.get("range_end"), "network.provisioning.dhcp.range_end", mode, errors)
     if start is not None and end is not None and start >= end:
@@ -292,24 +228,6 @@ def _validate_network(network: Any, mode: str, errors: list[str]) -> None:
                 errors.append(f"DHCP {label} must not be the subnet or broadcast address")
     if start is not None and end is not None and controller is not None and start <= controller <= end:
         errors.append("the controller address must be outside the dynamic DHCP pool")
-
-    prov_gateway = _ip(
-        provisioning.get("gateway"), "network.provisioning.gateway", SCHEMA_MODE, errors
-    )
-    if mode == INSTALL_MODE and "gateway" not in provisioning:
-        errors.append("network.provisioning.gateway must be present (use null for an isolated VLAN)")
-    if prov_gateway is not None and provisioning_net is not None and prov_gateway not in provisioning_net:
-        errors.append("network.provisioning.gateway must be inside the provisioning subnet")
-    if prov_gateway is not None and controller is not None and prov_gateway == controller:
-        errors.append("network.provisioning.gateway must not be the MAAS controller address")
-    if (
-        prov_gateway is not None
-        and start is not None
-        and end is not None
-        and start <= prov_gateway <= end
-    ):
-        errors.append("network.provisioning.gateway must be outside the dynamic DHCP pool")
-    _dns(provisioning.get("dns"), "network.provisioning.dns", False, errors)
 
     acceptance = _unknown(
         provisioning.get("acceptance"), ACCEPTANCE_KEYS, "network.provisioning.acceptance", errors
@@ -458,20 +376,6 @@ def _validate_disk(disk: dict[str, Any], mode: str, errors: list[str]) -> None:
             )
         if model and not identifiers:
             errors.append("deployment.disk.model cannot identify a disk by itself")
-
-
-def _port(value: Any, location: str, port_max: int, mode: str, errors: list[str]) -> int | None:
-    if value is None:
-        if mode == INSTALL_MODE:
-            errors.append(f"{location} is required before installation")
-        return None
-    if isinstance(value, bool) or not isinstance(value, int):
-        errors.append(f"{location} must be an integer port number")
-        return None
-    if not 1 <= value <= port_max:
-        errors.append(f"{location} must be a GS724Tv4 port from 1 to {port_max}")
-        return None
-    return value
 
 
 def _vlan(value: Any, location: str, errors: list[str], allow_one: bool) -> int | None:

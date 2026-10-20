@@ -150,6 +150,17 @@ def test_initial_plan_disables_management_dhcp_and_does_not_enable_provisioning(
     assert any(item["args"]["start_ip"] == "198.51.100.2" for item in ranges)
 
 
+def test_rerun_clears_stale_provisioning_routes_and_dns_without_disabling_activated_dhcp(ready):
+    inventory = _inventory()
+    inventory['subnets'][0].update(gateway_ip='198.51.100.1', dns_servers=['192.0.2.1'])
+    inventory['subnets'][0]['vlan']['dhcp_on'] = True
+    inventory['vlans'][0]['dhcp_on'] = True
+    actions = plan_initial(ready.network, inventory)
+    updates = [action['args'] for action in actions if action['op'] == 'subnet-update' and action['id'] == 1]
+    assert {'gateway_ip': '', 'dns_servers': '', 'managed': 'true'} in updates
+    assert not any(action['op'] == 'vlan-update' and action['vid'] == 100 for action in actions)
+
+
 def test_enable_and_disable_target_only_the_provisioning_vlan(ready):
     enabled = plan_enable(ready.network, _inventory())
     command = render_maas_command("admin", enabled[0])

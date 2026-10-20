@@ -18,23 +18,25 @@ python3 - "${ROOT}/config/network.yaml" <<'PY'
 import sys
 from pathlib import Path
 import yaml
+from maas_deploy.config import HARDWARE_REVISION
 doc = yaml.safe_load(Path(sys.argv[1]).read_text(encoding="utf-8"))["network"]
-switch = doc["switch"]
-print("Confirm these GS724T settings in the switch web interface before continuing.")
-print(f"  Hardware revision: {switch['hardware_revision']}")
-print(f"  Router port: {switch['router_port']}  (unchanged management LAN)")
-print(f"  MAAS port: {switch['maas_port']}  (management untagged, VLAN {doc['provisioning']['vlan_id']} tagged)")
-print(f"  Provisioning ports: {switch['provisioning_ports']}  (VLAN {doc['provisioning']['vlan_id']} untagged, PVID {doc['provisioning']['vlan_id']})")
+management = doc["management"]["vlan_id"]
+provisioning = doc["provisioning"]["vlan_id"]
+print(f"Confirm these {HARDWARE_REVISION} settings in the switch web interface before continuing.")
+print(f"  Router port: unchanged management VLAN {management}; excluded from VLAN {provisioning}")
+print(f"  MAAS port: management VLAN {management} untagged, VLAN {provisioning} tagged, PVID {management}")
+print(f"  Node ports: VLAN {provisioning} untagged only, PVID {provisioning}")
+print("Identify the actual connected ports; README section G provides an optional local worksheet.")
 print("Do not continue from memory. Read the VLAN Membership and Port PVID pages.")
 PY
 
 eval "$(python3 - <<'PY'
-from maas_deploy.config import load_config
+from maas_deploy.config import HARDWARE_REVISION, load_config
 import os
 from pathlib import Path
 root = Path(os.environ["MAAS_DEPLOY_ROOT"])
 config = load_config(root / "config/network.yaml", root / "config/deployment.yaml")
-revision = config.network["switch"]["hardware_revision"]
+revision = HARDWARE_REVISION
 vlan = config.network["provisioning"]["vlan_id"]
 print(f"EXPECTED='CONFIRM GS724T {revision} VLAN {vlan}'")
 PY

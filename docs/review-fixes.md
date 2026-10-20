@@ -24,6 +24,8 @@ An additional full-install check exposed Subiquity's default offline fallback: i
 
 ## Revised physical acceptance procedure
 
+The network YAML now contains only the 11 site inputs backed by required Actions Secrets. The GS724Tv4 assumption and isolation policies are fixed in code. Physical port numbers are optional local operator notes; the confirmation helper shows the required VLAN membership/PVID by role. Moving a cable still requires a fresh switch inspection and acceptance session even though local notes do not affect the configuration hash.
+
 A successful capture is evidence about the specific broadcast probe, not a general firewall or all possible network paths. Review the switch membership/PVID and retain the physical isolation checks. Use a separate **wired** management observer. A passive Wi-Fi capture is insufficient.
 
 The observer needs a checkout (or copies of the scripts and `maas_deploy` package), Python 3, `ip` and `tcpdump`. The provisioning test host needs Python 3, `ip`, `ping`, and `iputils-arping`, a static test address, and no default route.

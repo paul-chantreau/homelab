@@ -87,8 +87,7 @@ def test_disk_placeholder_does_not_authorize_installation(committed, variables):
 
 @pytest.mark.parametrize('name,value', [
     ('BACKUP_RETAIN', '0'), ('BACKUP_RETAIN', 'true'),
-    ('MANAGEMENT_VLAN_ID', '1.0'), ('SWITCH_PROVISIONING_PORTS', '[true]'),
-    ('SWITCH_PROVISIONING_PORTS', '[1]'), ('MANAGEMENT_DNS', '[]'),
+    ('MANAGEMENT_VLAN_ID', '1.0'), ('MANAGEMENT_DNS', '[]'),
     ('SSH_PUBLIC_KEY', '-----BEGIN OPENSSH PRIVATE KEY-----'),
     ('PROVISIONING_VLAN_ID', '1'), ('PROVISIONING_TEST_HOST', '198.51.100.110'),
 ])
@@ -105,19 +104,20 @@ def test_removed_options_cannot_override_fixed_settings(committed, variables):
     config, _ = resolve(committed, variables)
     assert config.deployment['disk']['model'] is None
     assert config.deployment['backup']['offhost_target'] is None
-    assert config.network['provisioning']['gateway'] is None
-    assert config.network['provisioning']['dns'] == []
+    assert 'gateway' not in config.network['provisioning']
+    assert 'dns' not in config.network['provisioning']
 
 
 def test_removed_switch_metadata_is_not_required_or_embedded(committed, variables):
     public, private = split_sources(variables)
     config, _ = resolve_sources(committed, public, private)
-    assert 'firmware_version' not in config.network['switch']
-    public['SWITCH_FIRMWARE_VERSION'] = 'obsolete-public-setting'
-    private['SWITCH_FIRMWARE_VERSION'] = 'obsolete-secret-setting'
+    assert 'switch' not in config.network
+    obsolete = {'SWITCH_FIRMWARE_VERSION', 'SWITCH_ROUTER_PORT', 'SWITCH_MAAS_PORT', 'SWITCH_PROVISIONING_PORTS'}
+    public.update({name: 'obsolete-public-setting' for name in obsolete})
+    private.update({name: 'obsolete-secret-setting' for name in obsolete})
     with_obsolete, statuses = resolve_sources(committed, public, private)
     assert with_obsolete.canonical_hash == config.canonical_hash
-    assert 'SWITCH_FIRMWARE_VERSION' not in statuses
+    assert not obsolete.intersection(statuses)
 
 
 def test_cli_validates_before_writing_and_embeds_effective_config(tmp_path, variables):

@@ -22,14 +22,6 @@ def committed() -> LoadedConfig:
 def ready(committed: LoadedConfig) -> LoadedConfig:
     network = copy.deepcopy(committed.network)
     deployment = copy.deepcopy(committed.deployment)
-    network["switch"].update(
-        {
-            "hardware_revision": "GS724Tv4",
-            "router_port": 1,
-            "maas_port": 2,
-            "provisioning_ports": [3, 4],
-        }
-    )
     network["management"].update(
         {
             "interface_mac": "52:54:00:12:34:56",
@@ -44,12 +36,10 @@ def ready(committed: LoadedConfig) -> LoadedConfig:
             "vlan_id": 100,
             "subnet": "198.51.100.0/24",
             "controller_address": "198.51.100.2",
-            "gateway": None,
-            "dns": [],
         }
     )
     network["provisioning"]["dhcp"].update(
-        {"activate_automatically": False, "range_start": "198.51.100.100", "range_end": "198.51.100.200"}
+        {"range_start": "198.51.100.100", "range_end": "198.51.100.200"}
     )
     network["provisioning"]["acceptance"]["test_host"] = "198.51.100.50"
     deployment["ssh_authorized_keys"] = [PUBLIC_KEY]

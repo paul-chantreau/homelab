@@ -73,9 +73,6 @@ jobs:
           variables-json: ${{ toJSON(vars) }}
           secrets-json: |
             {
-              "SWITCH_ROUTER_PORT": ${{ toJSON(secrets.SWITCH_ROUTER_PORT) }},
-              "SWITCH_MAAS_PORT": ${{ toJSON(secrets.SWITCH_MAAS_PORT) }},
-              "SWITCH_PROVISIONING_PORTS": ${{ toJSON(secrets.SWITCH_PROVISIONING_PORTS) }},
               "MANAGEMENT_INTERFACE_MAC": ${{ toJSON(secrets.MANAGEMENT_INTERFACE_MAC) }},
               "MANAGEMENT_ADDRESS": ${{ toJSON(secrets.MANAGEMENT_ADDRESS) }},
               "MANAGEMENT_GATEWAY": ${{ toJSON(secrets.MANAGEMENT_GATEWAY) }},

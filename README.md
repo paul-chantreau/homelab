@@ -11,7 +11,7 @@ Record all of the following before changing a port, building an ISO, or installi
 3. Existing VLAN membership and PVID of every port you might touch.
 4. Existing switch management VLAN.
 
-`config/network.yaml` already sets `hardware_revision` to `GS724Tv4`. Physical addresses stay null until you read them from the switch and the LAN. The installer refuses to erase a disk until the required site settings are filled in.
+The software assumes a GS724Tv4. `config/network.yaml` contains only 11 site-specific inputs, all supplied by required GitHub Actions Secrets during a build. Physical addresses stay null until you inspect the switch and the LAN. The installer refuses to erase a disk until the required site settings are filled in.
 
 The procedure uses the GS724Tv4 administration manual (25 September 2013, covers GS716Tv3, GS724Tv4, and GS748Tv5): <https://www.downloads.netgear.com/files/GDC/GS716TV3/GS716Tv3_GS724Tv4_GS748Tv5_SWA_25Sept2013.pdf>
 
@@ -102,17 +102,16 @@ There is one physical Ethernet port on the server. The management LAN and the pr
 
 The server switch port carries the management LAN untagged and the provisioning VLAN tagged. Its PVID stays the management VLAN. Machine ports carry the provisioning VLAN untagged, and their PVID is the provisioning VLAN ID. The router-facing port stays as it is. The existing router DHCP configuration is not modified.
 
-VLAN ID 100 and any addresses in examples are placeholders. The only topology this software implements is `network.mode: vlan`. A shared LAN is rejected. Moving DHCP onto the existing LAN would need a separate, approved migration plan.
+VLAN ID 100 and any addresses in examples are placeholders. The software always implements separate management and provisioning VLANs. Moving DHCP onto the existing LAN would need a separate, approved migration plan.
 
 ### Routing decision
 
 The implemented decision is an isolated provisioning VLAN:
 
-- `network.routing.decision` is `isolated`.
-- `network.routing.ubuntu_nat` is `false`.
+- Isolation is fixed policy, without routing or NAT configuration options.
 - The server does not forward packets and is not the default gateway.
 - The provisioning VLAN has no default route.
-- A provisioning gateway in the YAML, if you later set one, is only a DHCP option for clients. It does not change the server's default route.
+- MAAS clears provisioning gateway and DNS options on every configuration run.
 
 These are four different paths:
 
@@ -127,7 +126,7 @@ For fewer than 10 machines, keep the provisioning VLAN isolated. When a deployed
 
 1. Inter-VLAN routing on the existing router. This deployment does not add the provisioning VLAN to the router port.
 2. GS724Tv4 Layer 3 routing. The administration manual documents Routing, VLAN, VLAN Routing Wizard and VLAN Routing. Those pages stay unused.
-3. NAT or IP forwarding on Ubuntu. The validator rejects `ubuntu_nat: true`, and the host sysctl keeps `ip_forward` at 0.
+3. NAT or IP forwarding on Ubuntu. The host sysctl keeps `ip_forward` at 0; there is no installation option to enable it.
 
 ## B. Hardware prerequisites
 
@@ -194,7 +193,7 @@ Do not infer VLAN membership from the fact that a host has an address. Untagged 
 
 ## D. GS724Tv4 switch assumptions
 
-The switch is assumed to be a Netgear GS724Tv4. Leave `hardware_revision` set to `GS724Tv4` and use the web-interface procedures from its administration manual. Open the web interface (section E) and record:
+The switch is assumed to be a Netgear GS724Tv4. Use the web-interface procedures from its administration manual. Open the web interface (section E) and record:
 
 - Management IP address.
 - Management VLAN. It is configured under System, Management, IP Configuration. Leave it unchanged.
@@ -288,7 +287,7 @@ If the web interface is gone, use the console or factory-reset procedure in that
 
 Port numbers are whatever is printed on the front of the switch. Find each one by watching link LEDs: disconnect one cable, record the port whose LED goes out, reconnect it, and continue. Do not reuse an example number from this document.
 
-Copy this worksheet and replace every "User-defined" cell. The management VLAN column uses the ID you recorded, which is often 1 and is not automatically 1.
+Optionally copy this worksheet into private local notes and replace every "User-defined" cell. It is an operator aid, not an installation input: port numbers do not belong in YAML or GitHub Actions Secrets. Identifying and inspecting the connected ports is still required. The management VLAN column uses the ID you recorded, which is often 1 and is not automatically 1.
 
 | Device | Switch port | VLAN membership | PVID |
 |---|---|---|---|
@@ -298,9 +297,9 @@ Copy this worksheet and replace every "User-defined" cell. The management VLAN c
 | Machine 2 | User-defined | Provisioning U | Provisioning VLAN |
 | Additional machines | User-defined | Provisioning U | Provisioning VLAN |
 
-Those port numbers then go into `network.switch.router_port`, `network.switch.maas_port`, and `network.switch.provisioning_ports`. A port may appear in only one role. The GS724Tv4 accepts ports 1–26.
+A port may appear in only one role. The GS724Tv4 has 24 copper ports and two SFP ports, numbered 1–26. Software does not configure or query these ports.
 
-`sudo maas-network-confirm-switch` prints this worksheet from the YAML and asks you to type a confirmation only after you have compared it with the VLAN Membership and Port PVID pages.
+`sudo maas-network-confirm-switch` prints the required membership and PVID for each role, using the configured VLAN IDs. It asks for confirmation after you inspect the actual connected ports in the VLAN Membership and Port PVID pages. A worksheet is not required by this command.
 
 ## H. Preparing configuration files
 
@@ -328,15 +327,6 @@ The committed files pass schema mode and fail install mode. That is intentional.
 
 | Field | Meaning |
 |---|---|
-| `network.mode` | Must be `vlan` |
-| `network.routing.decision` | Must be `isolated` |
-| `network.routing.ubuntu_nat` | Must be `false` |
-| `network.switch.vendor` | `netgear` |
-| `network.switch.model` | `GS724T` |
-| `network.switch.hardware_revision` | Must stay `GS724Tv4` |
-| `network.switch.router_port` | Physical port toward the router. Left unchanged |
-| `network.switch.maas_port` | Physical port toward the server |
-| `network.switch.provisioning_ports` | Physical ports toward machines. At least one in install mode |
 | `network.management.interface_mac` | Server NIC MAC, `aa:bb:cc:dd:ee:ff`, unicast |
 | `network.management.address` | Server address on the management LAN, CIDR, such as a real `192.0.2.10/24` only if that is your chosen address |
 | `network.management.gateway` | Existing router address. It must sit inside the management subnet and must not be the server address |
@@ -345,14 +335,13 @@ The committed files pass schema mode and fail install mode. That is intentional.
 | `network.provisioning.vlan_id` | Provisioning VLAN. Placeholder 100 |
 | `network.provisioning.subnet` | Provisioning subnet in CIDR form. Must not overlap the management subnet |
 | `network.provisioning.controller_address` | Server address on that VLAN. Host address only, inside the subnet, outside the DHCP pool, and not the network or broadcast address |
-| `network.provisioning.dhcp.activate_automatically` | Must stay `false`. DHCP is a separate, confirmed command |
 | `network.provisioning.dhcp.range_start` | First dynamic address. Inside the subnet, before `range_end`, not the network or broadcast address |
 | `network.provisioning.dhcp.range_end` | Last dynamic address |
-| `network.provisioning.gateway` | Leave null for the isolated VLAN. If set later, it must be inside the provisioning subnet, outside the pool, and is not installed as a route on the server |
-| `network.provisioning.dns` | Optional DNS options for future DHCP clients |
 | `network.provisioning.acceptance.test_host` | Static address of the temporary test host, inside the provisioning subnet, outside the DHCP pool |
 
-Install mode also checks IPv4 and CIDR syntax, VLAN ID range, duplicate ports, the GS724Tv4 reserved VLANs 1, 2, and 3, and ports 1–26.
+Install mode also checks IPv4 and CIDR syntax, different management/provisioning VLAN IDs, and the GS724Tv4 reserved VLANs 1, 2, and 3. Each of the 11 fields above maps to a required Actions Secret listed in [Actions configuration](docs/actions-variables.md). DHCP starts disabled and requires a separate, confirmed activation.
+
+For an older manually edited YAML, remove `network.mode`, `network.routing`, `network.switch`, `network.provisioning.dhcp.activate_automatically`, `network.provisioning.gateway`, and `network.provisioning.dns`. Preserve the 11 site inputs above. Obsolete fields are rejected rather than silently ignored. Revalidate before installation or a playbook rerun. The changed configuration hash requires a fresh switch confirmation and acceptance session. Rebuilding from Actions uses the updated template automatically.
 
 ### `config/deployment.yaml`
 
@@ -651,7 +640,7 @@ Incorrect VLAN membership. A machine port left untagged in the management VLAN, 
 
 Incorrect PVID. The port can be a member of VLAN 100 and still classify incoming untagged frames into the management VLAN. Set the machine-port PVID to the provisioning VLAN ID. Creating the VLAN does not set PVID.
 
-Wrong physical switch port. LED identification is the source of truth. A configured port with no cable does nothing for the machine you plugged in elsewhere. Update the worksheet and the YAML together, then rebuild the confirmation. A changed YAML changes the configuration hash, so an old switch confirmation no longer matches.
+Wrong physical switch port. LED identification is the source of truth. A configured port with no cable does nothing for the machine you plugged in elsewhere. Correct the physical port settings, update any local notes, and repeat switch confirmation and the full acceptance session. Cabling and worksheet changes do not change the YAML hash; software cannot detect them automatically. A YAML change invalidates the previous switch confirmation through its configuration hash.
 
 No VLAN connectivity. On the server, `ip -d link show provisioning` must show the configured VLAN ID, and `ip address show provisioning` must show the controller address. Then check the MAAS port: management untagged, provisioning tagged, management PVID. A tagged server and an untagged machine port is the expected combination. Two tagged ports, or two untagged ports, will not pass the test-host ping.
 
@@ -755,7 +744,7 @@ Operator names on the installed server are `maas-network-activate`, `maas-networ
 
 ## What automated tests cover
 
-`pytest` covers the schema, VLAN and port rules, DHCP range safety, subnet overlap, MAC checks, Netplan rendering, autoinstall rendering, disk identity, DHCP refusal when validation is missing or stale, and a QEMU boot of a small GRUB ISO after the same injection path used for Ubuntu. `ansible-playbook --syntax-check` and `ansible-lint` cover the playbook. A local `scripts/build-iso.sh` run builds the real Ubuntu ISO and checks its checksum.
+`pytest` covers the schema, Actions input coverage, VLAN rules, DHCP range safety, subnet overlap, MAC checks, Netplan rendering, autoinstall rendering, disk identity, DHCP refusal when validation is missing or stale, and a QEMU boot of a small GRUB ISO after the same injection path used for Ubuntu. `ansible-playbook --syntax-check` and `ansible-lint` cover the playbook. A local `scripts/build-iso.sh` run builds the real Ubuntu ISO and checks its checksum.
 
 Those tests are static checks and virtual-machine checks. They do not program a GS724T, and they do not show that a physical provisioning VLAN is isolated from the existing LAN. Section M is the acceptance test that remains.
 

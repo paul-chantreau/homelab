@@ -93,14 +93,14 @@ def plan_initial(network: dict[str, Any], inventory: dict[str, Any]) -> list[dic
             }
         )
 
-    gateway = provisioning.get("gateway")
+    # Keep provisioning isolated, including clearing stale options on a rerun.
     actions.append(
         {
             "op": "subnet-update",
             "id": subnet_id,
             "args": {
-                "gateway_ip": "" if gateway in (None, "") else str(gateway),
-                "dns_servers": ",".join(str(item) for item in provisioning.get("dns") or []),
+                "gateway_ip": "",
+                "dns_servers": "",
                 "managed": "true",
             },
         }
