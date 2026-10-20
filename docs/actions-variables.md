@@ -32,7 +32,7 @@ Open Settings → Secrets and variables → Actions → **Secrets** → New repo
 
 These 11 Secrets correspond to every field in `config/network.yaml`. DNS lists use JSON, for example `["192.0.2.1"]`. Use your actual site values. VLAN IDs must be explicitly supplied. `PROVISIONING_TEST_HOST` is outside the DHCP pool and different from the controller.
 
-The GS724Tv4 model, isolated VLAN topology, disabled forwarding, cleared provisioning gateway/DNS options, and explicit DHCP activation are fixed behavior. Physical port numbers are optional private notes in the [wiring worksheet](../README.md#g-physical-port-mapping). They are not build inputs. Existing `SWITCH_ROUTER_PORT`, `SWITCH_MAAS_PORT`, and `SWITCH_PROVISIONING_PORTS` Secrets or Variables can be deleted; workflows ignore them. Physical switch inspection and acceptance remain mandatory.
+The GS724Tv4 model, isolated VLAN topology, disabled forwarding, cleared provisioning gateway/DNS options, and explicit DHCP activation are fixed behavior. Physical port numbers are optional private notes in the [wiring worksheet](../README.md#5-physical-port-mapping). They are not build inputs. Existing `SWITCH_ROUTER_PORT`, `SWITCH_MAAS_PORT`, and `SWITCH_PROVISIONING_PORTS` Secrets or Variables can be deleted; workflows ignore them. Physical switch inspection and acceptance remain mandatory.
 
 ## Disk Secrets: at least one required
 
@@ -85,6 +85,6 @@ For an ISO build, validated YAML files replace the runner's checkout copies with
 
 There is no `confirm_disk_erase` workflow input: manually building with a valid disk identity prepares an installation ISO that **erases that matching disk when booted**. The internal flag is set automatically. The physical installer still requires exactly one matching disk; switch confirmation and DHCP activation remain on-site steps.
 
-`DISK_MODEL`, `PROVISIONING_GATEWAY`, `PROVISIONING_DNS` and `BACKUP_OFFHOST_TARGET` are not Actions inputs. The disk model and off-host backup target remain null; provisioning gateway/DNS options are absent from YAML and explicitly cleared in MAAS. Backups stay on the controller. Changing GitHub settings affects future builds, not an installed server. For older local YAML files, follow the migration note in [Preparing configuration files](../README.md#h-preparing-configuration-files).
+`DISK_MODEL`, `PROVISIONING_GATEWAY`, `PROVISIONING_DNS` and `BACKUP_OFFHOST_TARGET` are not Actions inputs. The disk model and off-host backup target remain null; provisioning gateway/DNS options are absent from YAML and explicitly cleared in MAAS. Backups stay on the controller. Changing GitHub settings affects future builds, not an installed server. For older local YAML files, retain only the 11 network inputs listed above and revalidate before installation or a playbook rerun. Obsolete fields are rejected; the changed configuration hash requires fresh switch confirmation and acceptance.
 
 For local checks, supply public settings as `ACTIONS_VARIABLES_JSON` and confidential settings as `ACTIONS_SECRETS_JSON`, then run `python3 scripts/configure-actions.py`. Do not print or paste the confidential JSON. Use `--write-config` only in a disposable build checkout.

@@ -26,7 +26,7 @@ print(f"Confirm these {HARDWARE_REVISION} settings in the switch web interface b
 print(f"  Router port: unchanged management VLAN {management}; excluded from VLAN {provisioning}")
 print(f"  MAAS port: management VLAN {management} untagged, VLAN {provisioning} tagged, PVID {management}")
 print(f"  Node ports: VLAN {provisioning} untagged only, PVID {provisioning}")
-print("Identify the actual connected ports; README section G provides an optional local worksheet.")
+print("Identify the actual connected ports; README section 5 provides an optional local worksheet.")
 print("Do not continue from memory. Read the VLAN Membership and Port PVID pages.")
 PY
 
