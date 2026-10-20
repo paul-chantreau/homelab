@@ -20,6 +20,8 @@ This change fixes the code defects identified in the review of commit 62a4ca1.
 
 The account is explicitly configured for key-only login and passwordless sudo, because it is an administrative account whose password remains locked. Protect its private SSH key accordingly.
 
+An additional full-install check exposed Subiquity's default offline fallback: if mirror selection fails, the installer can partition/extract Ubuntu and later fail because Ansible is not on the installation medium. The template now uses the official HTTPS archive/security endpoints and `apt.fallback: abort`, since installing this controller requires online packages and snap downloads. The VM runner records the live installer journal and stops promptly on installer or first-boot failure.
+
 ## Revised physical acceptance procedure
 
 A successful capture is evidence about the specific broadcast probe, not a general firewall or all possible network paths. Review the switch membership/PVID and retain the physical isolation checks. Use a separate **wired** management observer. A passive Wi-Fi capture is insufficient.
@@ -76,7 +78,7 @@ HOMELAB_TEST_POSTGRES=1 python3 -m pytest -q tests/integration/test_postgresql_r
 
 They start and remove an isolated PostgreSQL 16 Docker container, with no host ports and no host mounts. They exercise real dump/restore, invalid archive rejection, schema mismatch and rollback on readiness failure. Only MAAS stop/start is simulated in this database test.
 
-The manual **Full ISO installation smoke test** workflow boots the actual customized Ubuntu ISO in an isolated UEFI QEMU guest with synthetic configuration and an ephemeral key. It checks the completed MAAS provisioning, installed helper symlinks, backup, a second Ansible run and recovery after reboot. It never uses installation Secrets and uploads only synthetic-test diagnostics, not the ISO or disk. It needs at least 18 GiB free; KVM is preferred, with TCG fallback.
+The manual **Full ISO installation smoke test** workflow boots the actual customized Ubuntu ISO in an isolated UEFI QEMU guest with synthetic configuration and an ephemeral key. It checks the completed MAAS provisioning, installed helper symlinks, backup/database restore, a second Ansible run and recovery after reboot. It never uses installation Secrets and uploads only synthetic-test diagnostics, not the ISO or disk. It needs at least 18 GiB free; KVM is preferred, with TCG fallback.
 
 A completed VM test does not prove physical GS724Tv4 isolation, PXE commissioning/deployment of actual nodes, or recovery onto replacement physical hardware. Report each level separately. Do not infer end-to-end readiness from the unit-test count.
 

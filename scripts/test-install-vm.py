@@ -11,6 +11,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import shlex
 import socket
 import subprocess
 import sys
@@ -62,19 +63,30 @@ def main():
         config.deployment['ssh_authorized_keys'] = [key.with_suffix('.pub').read_text().strip()]
         for name, value in [('network', config.network), ('deployment', config.deployment)]:
             (source / f'config/{name}.yaml').write_text(yaml.safe_dump({name: value}, sort_keys=False))
+        template = source / 'autoinstall/autoinstall.yaml.j2'
+        text = template.read_text()
+        # Stream installer diagnostics to the VM's serial log. This service
+        # exists only in the live test guest, never on the installed controller.
+        journal = ['systemd-run', '--unit=homelab-test-journal', '/bin/sh', '-c',
+                   'exec journalctl -f -n 200 -o short-iso > /dev/ttyS0']
+        text = text.replace('  early-commands:', '  early-commands:\n    - ' + json.dumps(journal))
         # Local cloud runners may need an egress proxy. Never embed proxy credentials.
         proxy = os.environ.get('HTTPS_PROXY') or os.environ.get('https_proxy')
         if proxy:
             parsed = urlparse(proxy)
             if parsed.username or parsed.password:
                 raise ValueError('VM test cannot embed proxy credentials')
-            template = source / 'autoinstall/autoinstall.yaml.j2'
-            text = template.read_text().replace('  version: 1', '  version: 1\n  proxy: ' + json.dumps(proxy))
+            if parsed.scheme == 'http' and parsed.hostname:
+                # Container-only names (such as "proxy") may not resolve in
+                # the guest. HTTP proxies do not require a TLS hostname.
+                address = socket.gethostbyname(parsed.hostname)
+                proxy = parsed._replace(netloc=address + (f':{parsed.port}' if parsed.port else '')).geturl()
+            text = text.replace('  version: 1', '  version: 1\n  proxy: ' + json.dumps(proxy))
             text = text.replace('  late-commands:', '''  late-commands:
         - mkdir -p /target/etc/systemd/system/snapd.service.d
         - cp /cdrom/maas-deploy/systemd/test-proxy.conf /target/etc/systemd/system/snapd.service.d/proxy.conf''')
-            template.write_text(text)
             (source / 'systemd/test-proxy.conf').write_text('[Service]\nEnvironment="HTTP_PROXY=' + proxy + '" "HTTPS_PROXY=' + proxy + '"\n')
+        template.write_text(text)
         image = work / 'test.iso'
         build(source, args.iso, image, config, args.sums.read_text())
         disk = work / 'disk.qcow2'
@@ -96,15 +108,26 @@ def main():
            '-o', f'UserKnownHostsFile={work / "known_hosts"}', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5',
            f'{config.deployment["admin_user"]}@127.0.0.1']
     with (work / 'qemu.log').open('w') as log:
+        (work / 'serial.log').unlink(missing_ok=True)
         process = subprocess.Popen(command, stdout=log, stderr=log)
         started = time.monotonic()
         try:
             while time.monotonic() - started < args.timeout:
                 if process.poll() is not None:
                     raise RuntimeError('QEMU exited; see qemu.log')
+                serial = work / 'serial.log'
+                if serial.exists():
+                    with serial.open('rb') as output:
+                        output.seek(max(0, serial.stat().st_size - 128 * 1024))
+                        lines = output.read().decode(errors='replace').splitlines()
+                    if any('subiquity/Install/' in line and ': FAIL:' in line for line in lines):
+                        raise RuntimeError('Ubuntu installer failed; see serial.log and screen.png')
                 probe = subprocess.run([*ssh, 'sudo -n test -f /var/lib/maas-provision/complete'], capture_output=True, text=True)
                 if probe.returncode == 0:
                     break
+                failed = subprocess.run([*ssh, 'sudo -n systemctl is-failed --quiet maas-firstboot.service'], capture_output=True)
+                if failed.returncode == 0:
+                    raise RuntimeError('MAAS first boot failed; see first-boot.log and ansible.log')
                 print(f'Waiting for installed MAAS: {int(time.monotonic() - started)}s; diagnostics in {work}', flush=True)
                 time.sleep(20)
             else:
@@ -113,6 +136,12 @@ def main():
             check = subprocess.run([*ssh, 'sudo -n maas-healthcheck && sudo -n maas-backup'], capture_output=True, text=True)
             (work / 'verification.log').write_text(check.stdout + check.stderr)
             check.check_returncode()
+            archive = check.stdout.strip().splitlines()[-1]
+            if not archive.startswith(config.deployment['backup']['directory'].rstrip('/') + '/') or not archive.endswith('.dump'):
+                raise RuntimeError('Backup did not report its completed archive path')
+            restored = subprocess.run([*ssh, 'sudo -n maas-restore --confirm RESTORE ' + shlex.quote(archive) + ' && sudo -n maas-healthcheck'], capture_output=True, text=True)
+            (work / 'restore.log').write_text(restored.stdout + restored.stderr)
+            restored.check_returncode()
             rerun = subprocess.run([*ssh, 'cd /opt/maas-deploy/ansible && sudo -n ansible-playbook install.yml'], capture_output=True, text=True)
             (work / 'rerun.log').write_text(rerun.stdout + rerun.stderr)
             rerun.check_returncode()
@@ -127,8 +156,8 @@ def main():
             else:
                 raise RuntimeError('MAAS did not recover after reboot')
             (work / 'result.json').write_text(json.dumps({'passed': True, 'acceleration': args.accel,
-                                                         'checks': ['UEFI install', 'MAAS API and VLAN health', 'private backup', 'Ansible rerun', 'reboot']}, indent=2))
-            print('Full installation, command symlinks, backup, rerun and reboot checks passed.', flush=True)
+                                                         'checks': ['UEFI install', 'MAAS API and VLAN health', 'private backup', 'database restore', 'Ansible rerun', 'reboot']}, indent=2))
+            print('Full installation, command symlinks, backup, restore, rerun and reboot checks passed.', flush=True)
         finally:
             try:
                 with socket.socket(socket.AF_UNIX) as monitor:

@@ -773,4 +773,4 @@ See [Network security options](docs/network-security.md) for server firewall and
 
 ## Corrective validation
 
-See [review corrections and integration tests](docs/review-fixes.md) for the reviewed defects, their fixes, the revised physical acceptance workflow, and the distinction between unit, PostgreSQL and full-VM validation. The manual **Full ISO installation smoke test** boots the real ISO without installation Secrets; it checks UEFI installation, MAAS, installed commands, backup, rerun and reboot.
+See [review corrections and integration tests](docs/review-fixes.md) for the reviewed defects, their fixes, the revised physical acceptance workflow, and the distinction between unit, PostgreSQL and full-VM validation. The manual **Full ISO installation smoke test** boots the real ISO without installation Secrets; it checks UEFI installation, MAAS, installed commands, backup/database restore, rerun and reboot.

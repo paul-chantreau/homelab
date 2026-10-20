@@ -8,6 +8,15 @@ autoinstall:
     layout: {{ keyboard_layout | tojson }}
     variant: {{ keyboard_variant | tojson }}
   timezone: {{ timezone | tojson }}
+  apt:
+    fallback: abort
+    geoip: false
+    mirror-selection:
+      primary:
+        - uri: https://archive.ubuntu.com/ubuntu
+    security:
+      - arches: [default]
+        uri: https://security.ubuntu.com/ubuntu
   identity:
     hostname: {{ hostname | tojson }}
     username: {{ admin_user | tojson }}

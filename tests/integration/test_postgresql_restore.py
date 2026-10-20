@@ -9,6 +9,7 @@ import pytest
 from maas_deploy.backup import create_backup, restore_database
 
 pytestmark = pytest.mark.integration
+OWNER = 'maas-test-role'
 
 
 @pytest.fixture(scope='module')
@@ -30,6 +31,7 @@ def postgres():
             time.sleep(1)
         else:
             pytest.fail('PostgreSQL container did not become ready')
+        psql(prefix, 'postgres', f'CREATE ROLE "{OWNER}" LOGIN;')
         yield prefix
     finally:
         subprocess.run(['docker', 'rm', '-f', name], check=False, capture_output=True)
@@ -43,8 +45,8 @@ def psql(prefix, db, statement):
 @pytest.fixture
 def database(postgres):
     name = 'maas_' + uuid.uuid4().hex[:10]
-    psql(postgres, 'postgres', f'CREATE DATABASE {name};')
-    psql(postgres, name, "CREATE TABLE django_migrations (app text, name text); INSERT INTO django_migrations VALUES ('maas','001'); CREATE TABLE maasserver_node (hostname text); INSERT INTO maasserver_node VALUES ('saved-node');")
+    psql(postgres, 'postgres', f'CREATE DATABASE {name} OWNER "{OWNER}";')
+    psql(postgres, name, f'SET ROLE "{OWNER}"; ' + "CREATE TABLE django_migrations (app text, name text); INSERT INTO django_migrations VALUES ('maas','001'); CREATE TABLE maasserver_node (hostname text); INSERT INTO maasserver_node VALUES ('saved-node');")
     return name
 
 
@@ -60,8 +62,9 @@ def test_private_archive_can_be_restored_without_postgres_opening_root_paths(tmp
     create_backup(database, archive, prefix=postgres)
     assert archive.stat().st_mode & 0o777 == 0o600
     psql(postgres, database, "UPDATE maasserver_node SET hostname='newer-node';")
-    previous = restore_database(database, 'postgres', archive, prefix=postgres, run=snap_stub)
+    previous = restore_database(database, OWNER, archive, prefix=postgres, run=snap_stub)
     assert psql(postgres, database, 'SELECT hostname FROM maasserver_node') == 'saved-node'
+    assert psql(postgres, database, "SELECT tableowner FROM pg_tables WHERE tablename='maasserver_node'") == OWNER
     assert psql(postgres, previous, 'SELECT hostname FROM maasserver_node') == 'newer-node'
 
 
@@ -73,7 +76,7 @@ def test_broken_archive_cannot_replace_existing_database(tmp_path, postgres, dat
         calls.append(command)
         return snap_stub(command, **kwargs)
     with pytest.raises(subprocess.CalledProcessError):
-        restore_database(database, 'postgres', archive, prefix=postgres, run=run)
+        restore_database(database, OWNER, archive, prefix=postgres, run=run)
     assert not any(command[0] == 'snap' for command in calls)
     assert psql(postgres, database, 'SELECT hostname FROM maasserver_node') == 'saved-node'
 
@@ -85,7 +88,7 @@ def test_failed_readiness_rolls_back_to_original_database(tmp_path, postgres, da
     def fail():
         raise RuntimeError('MAAS health check failed')
     with pytest.raises(RuntimeError):
-        restore_database(database, 'postgres', archive, prefix=postgres, run=snap_stub, readiness=fail)
+        restore_database(database, OWNER, archive, prefix=postgres, run=snap_stub, readiness=fail)
     assert psql(postgres, database, 'SELECT hostname FROM maasserver_node') == 'original-live'
 
 
@@ -98,6 +101,6 @@ def test_incompatible_migrations_are_rejected_before_service_stop(tmp_path, post
         calls.append(command)
         return snap_stub(command, **kwargs)
     with pytest.raises(ValueError, match='schema version'):
-        restore_database(database, 'postgres', archive, prefix=postgres, run=run)
+        restore_database(database, OWNER, archive, prefix=postgres, run=run)
     assert not any(command[0] == 'snap' for command in calls)
     assert psql(postgres, database, 'SELECT count(*) FROM django_migrations') == '2'
