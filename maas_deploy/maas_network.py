@@ -22,18 +22,42 @@ def _subnet_by_cidr(inventory: dict[str, Any], cidr: str) -> dict[str, Any] | No
     return None
 
 
-def _vlan(inventory: dict[str, Any], vid: int) -> dict[str, Any] | None:
-    for vlan in inventory.get("vlans") or []:
-        if int(vlan.get("vid")) == vid:
-            return vlan
-    return None
+def controller_vlan(network: dict[str, Any], inventory: dict[str, Any]) -> dict[str, Any]:
+    """Anchor the provisioning VLAN to the sole rack's verified NIC/interface."""
+    racks = inventory.get("racks") or []
+    if len(racks) != 1 or not racks[0].get("system_id"):
+        raise PlanError("exactly one MAAS rack controller must be registered")
+    mac = str(network["management"]["interface_mac"]).lower()
+    interfaces = inventory.get("interfaces") or []
+    physical = [item for item in interfaces if item.get("type") == "physical" and str(item.get("mac_address", "")).lower() == mac]
+    if len(physical) != 1:
+        raise PlanError("rack must report exactly one physical interface with the configured MAC")
+    candidates = [item for item in interfaces if item.get("name") == "provisioning" and item.get("type") == "vlan"
+                  and str(item.get("mac_address", "")).lower() == mac
+                  and (item.get("vlan") or {}).get("vid") == int(network["provisioning"]["vlan_id"])
+                  and physical[0]["name"] in {str(parent) for parent in item.get("parents") or []}]
+    if len(candidates) != 1:
+        raise PlanError("rack must report the provisioning VLAN on the configured physical interface")
+    vlan_id = candidates[0]["vlan"]["id"]
+    matches = [item for item in inventory.get("vlans") or [] if item.get("id") == vlan_id]
+    if len(matches) != 1:
+        raise PlanError("provisioning interface VLAN is missing or ambiguous in the fabric inventory")
+    return matches[0]
+
+
+def subnet_vlan(subnet: dict[str, Any], inventory: dict[str, Any]) -> dict[str, Any]:
+    value = subnet.get("vlan") or {}
+    matches = [item for item in inventory.get("vlans") or [] if item.get("id") == value.get("id")]
+    if len(matches) != 1:
+        raise PlanError("subnet VLAN cannot be resolved unambiguously")
+    return matches[0]
 
 
 def _ranges_for(inventory: dict[str, Any], subnet_id: Any) -> list[dict[str, Any]]:
     return [
         item
         for item in inventory.get("ipranges") or []
-        if str((item.get("subnet") or {}).get("id", item.get("subnet_id"))) == str(subnet_id)
+        if str(item["subnet"].get("id") if isinstance(item.get("subnet"), dict) else item.get("subnet", item.get("subnet_id"))) == str(subnet_id)
         or str(item.get("subnet")) == str(subnet_id)
     ]
 
@@ -46,17 +70,20 @@ def plan_initial(network: dict[str, Any], inventory: dict[str, Any]) -> list[dic
     """
     actions: list[dict[str, Any]] = []
     provisioning = network["provisioning"]
+    vlan = controller_vlan(network, inventory)
     cidr = str(provisioning["subnet"])
     subnet = _subnet_by_cidr(inventory, cidr)
     if subnet is None:
         actions.append(
             {
                 "op": "subnet-create",
-                "args": {"cidr": cidr, "name": "provisioning"},
+                "args": {"cidr": cidr, "name": "provisioning", "vlan": vlan["id"], "managed": "true"},
             }
         )
         subnet_id = "$provisioning"
     else:
+        if subnet_vlan(subnet, inventory)["id"] != vlan["id"]:
+            raise PlanError("provisioning subnet is attached to a different VLAN; refusing to move it")
         subnet_id = subnet["id"]
         actions.append(
             {
@@ -74,7 +101,7 @@ def plan_initial(network: dict[str, Any], inventory: dict[str, Any]) -> list[dic
             "args": {
                 "gateway_ip": "" if gateway in (None, "") else str(gateway),
                 "dns_servers": ",".join(str(item) for item in provisioning.get("dns") or []),
-                "managed": "false",
+                "managed": "true",
             },
         }
     )
@@ -92,9 +119,6 @@ def plan_initial(network: dict[str, Any], inventory: dict[str, Any]) -> list[dic
         )
     )
 
-    vlan = _vlan(inventory, int(provisioning["vlan_id"]))
-    if vlan is None:
-        raise PlanError(f"MAAS has not discovered provisioning VLAN {provisioning['vlan_id']}")
     if vlan.get("dhcp_on") is not True:
         actions.append(
             {
@@ -108,7 +132,9 @@ def plan_initial(network: dict[str, Any], inventory: dict[str, Any]) -> list[dic
     management = ipaddress.ip_interface(str(network["management"]["address"])).network
     management_subnet = _subnet_by_cidr(inventory, str(management))
     if management_subnet is not None:
-        management_vlan = management_subnet.get("vlan") or {}
+        management_vlan = subnet_vlan(management_subnet, inventory)
+        if management_vlan["id"] == vlan["id"]:
+            raise PlanError("management and provisioning subnets share a MAAS VLAN")
         if management_vlan.get("dhcp_on") is True:
             actions.append(
                 {
@@ -124,15 +150,20 @@ def plan_initial(network: dict[str, Any], inventory: dict[str, Any]) -> list[dic
 def plan_enable(network: dict[str, Any], inventory: dict[str, Any]) -> list[dict[str, Any]]:
     provisioning = network["provisioning"]
     vid = int(provisioning["vlan_id"])
-    vlan = _vlan(inventory, vid)
-    if vlan is None:
-        raise PlanError(f"provisioning VLAN {vid} is not present in MAAS")
+    vlan = controller_vlan(network, inventory)
     racks = inventory.get("racks") or []
     if len(racks) != 1 or not racks[0].get("system_id"):
         raise PlanError("exactly one MAAS rack controller must be registered")
     subnet = _subnet_by_cidr(inventory, str(provisioning["subnet"]))
     if subnet is None:
         raise PlanError("the provisioning subnet does not exist in MAAS")
+    if subnet_vlan(subnet, inventory)["id"] != vlan["id"] or subnet.get("managed") is not True:
+        raise PlanError("provisioning subnet must be managed and attached to the controller VLAN")
+    ranges = _ranges_for(inventory, subnet["id"])
+    dhcp = provisioning["dhcp"]
+    if not any(item.get("type") == "dynamic" and item.get("start_ip") == dhcp["range_start"]
+               and item.get("end_ip") == dhcp["range_end"] for item in ranges):
+        raise PlanError("configured dynamic range is not present on the provisioning subnet")
     management_vid = int(network["management"]["vlan_id"])
     if vid == management_vid:
         raise PlanError("refusing to enable DHCP on the management VLAN")
@@ -148,9 +179,7 @@ def plan_enable(network: dict[str, Any], inventory: dict[str, Any]) -> list[dict
 
 def plan_disable(network: dict[str, Any], inventory: dict[str, Any]) -> list[dict[str, Any]]:
     vid = int(network["provisioning"]["vlan_id"])
-    vlan = _vlan(inventory, vid)
-    if vlan is None:
-        raise PlanError(f"provisioning VLAN {vid} is not present in MAAS")
+    vlan = controller_vlan(network, inventory)
     return [
         {
             "op": "vlan-update",

@@ -32,26 +32,17 @@ def _locked_password_hash() -> str:
 
 
 def disk_match(deployment: dict[str, Any], install_ready: bool) -> dict[str, str]:
-    if not install_ready:
-        return {"serial": REFUSAL_SERIAL}
-    disk = deployment["disk"]
-    match: dict[str, str] = {}
-    for key in ("serial", "wwn"):
-        if disk.get(key):
-            match[key] = str(disk[key])
-    if disk.get("by_id"):
-        match["path"] = str(disk["by_id"])
-    if disk.get("model") and match:
-        match["model"] = str(disk["model"])
-    if not match:
-        return {"serial": REFUSAL_SERIAL}
-    return match
+    # Always refuse selection until early-commands have checked the actual disks.
+    # Stable IDs remain solely in deployment.yaml and are never passed as an
+    # unverified/unsupported Subiquity match directive.
+    return {"serial": REFUSAL_SERIAL}
 
 
 def render_autoinstall(
     network: dict[str, Any],
     deployment: dict[str, Any],
     install_ready: bool,
+    *, template_dir: Path | None = None,
 ) -> str:
     """Return cloud-config autoinstall user-data.
 
@@ -59,7 +50,7 @@ def render_autoinstall(
     partitioning. Its storage match is an impossible serial so a skipped precheck
     cannot fall through to the largest disk.
     """
-    template_dir = Path(__file__).resolve().parents[1] / "autoinstall"
+    template_dir = template_dir or Path(__file__).resolve().parents[1] / "autoinstall"
     environment = Environment(
         loader=FileSystemLoader(template_dir),
         undefined=StrictUndefined,

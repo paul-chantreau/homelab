@@ -68,8 +68,8 @@ def build_steps(state: dict[str, Any], deployment: dict[str, Any], uri: str, url
                     "--email",
                     deployment["maas"]["admin_email"],
                 ],
-                "secret_stdin": True,
+                "secret_args": True,
             }
         )
-    steps.append({"name": "login-and-set-url", "url": url})
+    steps.append({"name": "login", "url": url})
     return steps

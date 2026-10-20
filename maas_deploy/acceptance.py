@@ -177,7 +177,8 @@ def _test_host(network: dict[str, Any], facts: dict[str, Any]) -> dict[str, str]
         return _result(FAIL, f"{expected} did not answer ping on the provisioning VLAN")
     if observed.get("arping") is not True:
         return _result(INCONCLUSIVE, f"{expected} answered ping, but ARP on the VLAN interface was not confirmed")
-    if observed.get("reverse_tcp") is not True:
+    probe = observed.get("probe") or {}
+    if probe.get("verified_broadcast") is not True or probe.get("peer_address") != expected:
         return _result(
             INCONCLUSIVE,
             "the server can reach the test host, but the test host has not connected back",
@@ -200,11 +201,33 @@ def _isolation(network: dict[str, Any], facts: dict[str, Any]) -> dict[str, str]
         return _result(INCONCLUSIVE, "the capture was for a different VLAN")
     if test_host and report.get("observed_host") != test_host:
         return _result(INCONCLUSIVE, "the capture did not watch the acceptance test host")
+    if report.get("capture_complete") is not True:
+        return _result(INCONCLUSIVE, "observer capture did not complete successfully")
+    management = str(ipaddress.ip_interface(str(network["management"]["address"])).network)
+    if report.get("management_subnet") != management:
+        return _result(INCONCLUSIVE, "observer was not verified on the management subnet")
     seconds = report.get("seconds")
-    if not isinstance(seconds, int) or seconds < 20:
+    if not isinstance(seconds, (int, float)) or seconds < 20:
         return _result(INCONCLUSIVE, "the management-LAN capture was shorter than 20 seconds")
+    probe = (facts.get("test_host") or {}).get("probe") or {}
+    if probe.get("verified_broadcast") is not True or probe.get("peer_address") != test_host:
+        return _result(INCONCLUSIVE, "no correlated broadcast probe from the test host")
+    try:
+        start = datetime.fromisoformat(report["started_at"])
+        end = datetime.fromisoformat(report["finished_at"])
+        probe_start = datetime.fromisoformat(probe["broadcast_started_at"])
+        probe_end = datetime.fromisoformat(probe["broadcast_finished_at"])
+        now = datetime.now(timezone.utc)
+        if any(value.tzinfo is None for value in [start, end, probe_start, probe_end]):
+            raise ValueError("timestamps must include timezone")
+        if not start <= probe_start <= probe_end <= end <= now or (now - end).total_seconds() > 300:
+            return _result(INCONCLUSIVE, "capture is stale or does not cover the broadcast probe")
+        if abs((end - start).total_seconds() - seconds) > 2:
+            return _result(INCONCLUSIVE, "capture duration is inconsistent")
+    except (ValueError, TypeError, KeyError):
+        return _result(INCONCLUSIVE, "capture/probe timestamps are missing or invalid")
     if report.get("packet_count") == 0:
-        return _result(PASS, "the management-LAN observer saw no provisioning VLAN traffic")
+        return _result(PASS, "no broadcast probe leakage was observed during the verified capture")
     if isinstance(report.get("packet_count"), int) and report["packet_count"] > 0:
         return _result(FAIL, "provisioning traffic was observed on the management LAN")
     return _result(INCONCLUSIVE, "the isolation report did not include a packet count")
@@ -214,7 +237,9 @@ def _dhcp(facts: dict[str, Any]) -> dict[str, str]:
     capture = facts.get("dhcp_capture") or {}
     if capture.get("ran") is not True:
         return _result(INCONCLUSIVE, "no DHCP capture was taken on the provisioning VLAN")
-    offers = capture.get("offer_count")
+    if capture.get("capture_complete") is not True or capture.get("seconds", 0) < 10:
+        return _result(INCONCLUSIVE, "DHCP capture did not complete for the required interval")
+    offers = capture.get("server_reply_count")
     if offers == 0:
         return _result(PASS, "no DHCP offer was observed on the provisioning VLAN during the capture")
     if isinstance(offers, int) and offers > 0:

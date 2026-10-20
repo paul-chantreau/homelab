@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -13,8 +14,8 @@ from maas_deploy.config import INSTALL_MODE, ConfigError, load_config, validate
 from maas_deploy.dhcp_gate import activation_phrase, assess_activation, deactivation_phrase, emergency_phrase
 from maas_deploy.iso import build
 from maas_deploy.netplan import render_netplan
-from maas_deploy.maas_network import plan_disable, plan_enable, render_maas_command
-from maas_deploy.facts import default_route, dhcp_offer_count, interfaces_from_ip, parse_maas_status
+from maas_deploy.maas_network import controller_vlan, plan_disable, plan_enable, render_maas_command
+from maas_deploy.facts import default_route, interfaces_from_ip, parse_maas_status
 from maas_deploy.runtime import SetupError, _run, apply_images, apply_maas, apply_network, apply_postgres, inventory
 from maas_deploy.secrets import load
 
@@ -66,6 +67,35 @@ def command_network() -> int:
     validate(config, INSTALL_MODE)
     print(apply_network(config, Path("/etc/maas-provision/secrets.env")))
     return 0
+
+
+def command_backup() -> int:
+    from maas_deploy.backup import backup_controller
+    config = _config()
+    validate(config, INSTALL_MODE)
+    print(backup_controller(config, _root()))
+    return 0
+
+
+def command_restore() -> int:
+    from maas_deploy.backup import restore_database
+    from maas_deploy.runtime import _wait_for_maas
+    config = _config()
+    validate(config, INSTALL_MODE)
+    previous = restore_database(config.deployment["postgresql"]["database"],
+                                config.deployment["postgresql"]["user"], Path(sys.argv[2]),
+                                readiness=_wait_for_maas)
+    print(f"Restored MAAS; previous database retained as {previous}")
+    return 0
+
+
+def command_healthcheck() -> int:
+    from maas_deploy.healthcheck import collect, evaluate as health_evaluate
+    config = _config()
+    validate(config, INSTALL_MODE)
+    report = health_evaluate(collect(config, Path("/etc/maas-provision/secrets.env"), _state()))
+    print(json.dumps(report, indent=2))
+    return 0 if report["outcome"] == "pass" else 1
 
 
 def command_images() -> int:
@@ -120,14 +150,9 @@ def command_assemble_facts() -> int:
             "address": None if test_address in {"", "-"} else test_address,
             "ping": (work / "test.ping").read_text(encoding="utf-8").strip() == "yes",
             "arping": (work / "test.arping").read_text(encoding="utf-8").strip() == "yes",
-            "reverse_tcp": (work / "test.reverse").read_text(encoding="utf-8").strip().startswith(
-                "PROVISIONING-TEST-OK"
-            ),
+            "probe": json.loads((work / "test.reverse").read_text(encoding="utf-8")) if (work / "test.reverse").read_text().strip() else {},
         },
-        "dhcp_capture": {
-            "ran": (work / "dhcp.ran").read_text(encoding="utf-8").strip() == "yes",
-            "offer_count": dhcp_offer_count((work / "dhcp.txt").read_text(encoding="utf-8")),
-        },
+        "dhcp_capture": json.loads((work / "dhcp.json").read_text(encoding="utf-8")) if (work / "dhcp.json").exists() else {"ran": False},
         "maas_rack": parse_maas_status((work / "maas-status.txt").read_text(encoding="utf-8")),
     }
     isolation = work / "isolation.json"
@@ -173,7 +198,7 @@ def _dhcp_change(enabled: bool, phrase: str, emergency: bool = False) -> int:
         if int(action.get("vid", vlan_id)) != vlan_id:
             return _die("Refusing a DHCP change that does not target the provisioning VLAN.")
         _run(render_maas_command(profile, action))
-    confirmed = _vlan_dhcp_state(profile, vlan_id)
+    confirmed = bool(controller_vlan(config.network, inventory(profile)).get("dhcp_on"))
     if confirmed is not enabled:
         return _die(f"MAAS reports dhcp_on={confirmed} after the change.")
     marker = _state() / "dhcp-active"
@@ -183,13 +208,6 @@ def _dhcp_change(enabled: bool, phrase: str, emergency: bool = False) -> int:
         marker.unlink()
     print("DHCP is active." if enabled else "DHCP is stopped.")
     return 0
-
-
-def _vlan_dhcp_state(profile: str, vlan_id: int) -> bool:
-    for vlan in inventory(profile)["vlans"]:
-        if int(vlan.get("vid")) == vlan_id:
-            return bool(vlan.get("dhcp_on"))
-    raise SetupError(f"VLAN {vlan_id} disappeared during the DHCP change")
 
 
 def command_dhcp_enable() -> int:
@@ -246,6 +264,9 @@ def main(argv: list[str] | None = None) -> int:
         "maas": command_maas,
         "network": command_network,
         "images": command_images,
+        "healthcheck": command_healthcheck,
+        "backup": command_backup,
+        "restore": command_restore,
         "assemble-facts": command_assemble_facts,
         "write-validation": command_write_validation,
         "dhcp-enable": command_dhcp_enable,
@@ -258,7 +279,7 @@ def main(argv: list[str] | None = None) -> int:
         if handler is None:
             return _die(f"unknown command {args[0]}")
         return handler()
-    except (ConfigError, SetupError, FileNotFoundError, json.JSONDecodeError, KeyError) as exc:
+    except (ConfigError, SetupError, OSError, ValueError, KeyError, subprocess.CalledProcessError) as exc:
         return _die(str(exc))
 
 

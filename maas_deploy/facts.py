@@ -43,34 +43,30 @@ def default_route(route_text: str) -> dict[str, Any]:
 
 
 def parse_maas_status(text: str) -> dict[str, Any]:
-    region = False
-    rack = False
-    dhcp = False
+    """Parse Pebble's Current column, with explicit legacy-status support."""
+    services = {}
+    current_column = None
     for line in text.splitlines():
         parts = line.split()
-        if len(parts) < 2:
+        if not parts:
             continue
-        name = parts[0].lower().rstrip(":")
-        state = parts[-1].lower()
-        running = state in {"running", "active"}
-        if name.startswith("regiond") and running:
-            region = True
-        if name == "rackd" and running:
-            rack = True
-        if name in {"dhcpd", "dhcpd4"} and running:
-            dhcp = True
+        if parts[0].lower() == "service" and "Current" in parts:
+            current_column = parts.index("Current")
+            continue
+        if current_column is not None:
+            if len(parts) <= current_column:
+                continue
+            state = parts[current_column].lower()
+        elif len(parts) >= 2 and parts[1].lower() in {"running", "stopped", "active", "inactive"}:
+            state = parts[1].lower()
+        else:
+            continue
+        services[parts[0].lower().rstrip(":")] = state
+    active = lambda names: any(services.get(name) in {"active", "running"} for name in names)
     return {
-        "present": bool(text.strip()),
-        "region_active": region,
-        "rack_active": rack,
-        "dhcp_active": dhcp,
+        "present": bool(services),
+        "region_active": active([name for name in services if name.startswith("regiond")]),
+        "rack_active": active(["rackd"]),
+        "dhcp_active": active(["dhcpd", "dhcpd4"]),
+        "services": services,
     }
-
-
-def dhcp_offer_count(capture: str) -> int:
-    count = 0
-    for line in capture.splitlines():
-        lowered = line.lower()
-        if "offer" in lowered or "message-type offer" in lowered:
-            count += 1
-    return count

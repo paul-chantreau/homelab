@@ -10,7 +10,7 @@ import pytest
 from maas_deploy.config import LoadedConfig, load_config
 
 ROOT = Path(__file__).resolve().parents[1]
-PUBLIC_KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGbYkExampleKeyForTestsOnly tester"
+PUBLIC_KEY = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJlcpwFckeppqZKV/Tdh039UG2PeCb3EBZjyQUXnv71E agent@3feae36e8d35'
 
 
 @pytest.fixture

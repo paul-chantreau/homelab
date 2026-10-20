@@ -4,7 +4,8 @@
 set -euo pipefail
 set +x
 
-ROOT="${MAAS_DEPLOY_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+SCRIPT_PATH="$(readlink -f -- "${BASH_SOURCE[0]}")"
+ROOT="${MAAS_DEPLOY_ROOT:-$(cd "$(dirname "${SCRIPT_PATH}")/.." && pwd)}"
 STATE="${MAAS_STATE_DIR:-/var/lib/maas-provision}"
 export MAAS_DEPLOY_ROOT="$ROOT"
 export MAAS_STATE_DIR="$STATE"
@@ -83,9 +84,10 @@ echo no >"${WORK}/test.ping"
 echo no >"${WORK}/test.arping"
 : >"${WORK}/test.reverse"
 if [[ "${TEST_HOST}" != "-" ]]; then
-  echo "On the temporary test host, run:"
-  echo "  sudo ${ROOT}/scripts/provisioning-test-host.sh --controller ${CONTROLLER}"
-  python3 -m maas_deploy.listen --address "${CONTROLLER}" --port 19999 --seconds 45 --output "${WORK}/test.reverse" &
+  PROBE_TOKEN="$(python3 -c 'import uuid; print(uuid.uuid4().hex)')"
+  echo "Start the management observer capture first. On the temporary test host, run:"
+  echo "  sudo ./provisioning-test-host.sh --controller ${CONTROLLER} --token ${PROBE_TOKEN}"
+  python3 -m maas_deploy.listen --address "${CONTROLLER}" --port 19999 --seconds 45 --token "${PROBE_TOKEN}" --expected-host "${TEST_HOST}" --output "${WORK}/test.reverse" &
   listener=$!
   if ping -c 3 -W 2 -I provisioning "${TEST_HOST}"; then
     echo yes >"${WORK}/test.ping"
@@ -96,17 +98,7 @@ if [[ "${TEST_HOST}" != "-" ]]; then
   wait "${listener}" || true
 fi
 
-if timeout 15 tcpdump -n -i provisioning -c 20 'udp port 67 or udp port 68' >"${WORK}/dhcp.txt" 2>"${WORK}/dhcp.err"; then
-  echo yes >"${WORK}/dhcp.ran"
-else
-  status=$?
-  if [[ "${status}" -eq 124 ]]; then
-    echo yes >"${WORK}/dhcp.ran"
-  else
-    echo no >"${WORK}/dhcp.ran"
-    : >"${WORK}/dhcp.txt"
-  fi
-fi
+python3 -m maas_deploy.capture dhcp --interface provisioning --seconds 15 --output "${WORK}/dhcp.json" || true
 
 if maas status >"${WORK}/maas-status.txt" 2>&1; then
   true
@@ -115,6 +107,11 @@ else
 fi
 
 if [[ -n "${ISOLATION_REPORT}" ]]; then
+  echo "Copy the completed observer report to ${ISOLATION_REPORT} now (waiting up to 120 seconds)."
+  for attempt in {1..60}; do
+    [[ -f "${ISOLATION_REPORT}" ]] && break
+    sleep 2
+  done
   cp "${ISOLATION_REPORT}" "${WORK}/isolation.json"
 fi
 

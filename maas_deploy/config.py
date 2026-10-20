@@ -11,6 +11,8 @@ import hashlib
 import ipaddress
 import json
 import re
+import subprocess
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -344,6 +346,19 @@ def _validate_deployment(deployment: Any, mode: str, errors: list[str]) -> None:
         errors.append("deployment.keyboard_variant must be an XKB variant name")
     if deployment.get("keyboard_layout") == "fr" and variant == "legacy":
         errors.append("deployment.keyboard_variant: French legacy uses 'latin9', not 'legacy'")
+    try:
+        ZoneInfo(str(deployment.get("timezone", "")))
+    except (ZoneInfoNotFoundError, ValueError):
+        errors.append("deployment.timezone is not an installed IANA timezone")
+    input_data = json.loads((Path(__file__).resolve().parents[1] / "config/ubuntu-input-data.json").read_text())
+    if input_data["source_iso_sha256"] != (deployment.get("ubuntu") or {}).get("sha256"):
+        errors.append("Ubuntu input metadata must be regenerated for the selected ISO checksum")
+    layout = deployment.get("keyboard_layout")
+    if not isinstance(layout, str) or layout not in input_data["layouts"] or variant not in input_data["layouts"].get(layout, []):
+        errors.append("deployment.keyboard_layout/keyboard_variant is not supported by the pinned Ubuntu image")
+    locale = str(deployment.get("locale", "")).lower().replace("-", "")
+    if locale not in {value.lower().replace("-", "") for value in [*input_data["locales"], "C", "C.UTF-8", "POSIX"]}:
+        errors.append("deployment.locale is not supported by the pinned Ubuntu image")
     admin = deployment.get("admin_user")
     if not isinstance(admin, str) or not _USER.match(admin):
         errors.append("deployment.admin_user must be a local account name")
@@ -359,6 +374,13 @@ def _validate_deployment(deployment: Any, mode: str, errors: list[str]) -> None:
         for index, key in enumerate(keys):
             if not isinstance(key, str) or not _SSH_PUBLIC.match(key.strip()):
                 errors.append(f"deployment.ssh_authorized_keys[{index}] is not an SSH public key")
+            else:
+                try:
+                    result = subprocess.run(["ssh-keygen", "-lf", "-"], input=key.strip() + "\n", text=True, capture_output=True, timeout=5)
+                    if result.returncode:
+                        errors.append(f"deployment.ssh_authorized_keys[{index}] is not a valid SSH public key")
+                except (OSError, subprocess.TimeoutExpired):
+                    errors.append("ssh-keygen is required to validate SSH public keys")
 
     disk = _unknown(deployment.get("disk"), DISK_KEYS, "deployment.disk", errors)
     _validate_disk(disk, mode, errors)

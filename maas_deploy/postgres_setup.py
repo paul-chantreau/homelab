@@ -34,13 +34,13 @@ def role_sql(user: str, password: str, role_exists: bool) -> str | None:
     if role_exists:
         return None
     escaped = password.replace("'", "''")
-    return f"CREATE ROLE {user} LOGIN PASSWORD '{escaped}';"
+    return f"CREATE ROLE \"{user}\" LOGIN PASSWORD '{escaped}';"
 
 
 def database_sql(database: str, user: str, database_exists: bool) -> str | None:
     if database_exists:
         return None
-    return f"CREATE DATABASE {database} OWNER {user};"
+    return f'CREATE DATABASE "{database}" OWNER "{user}";'
 
 
 def plan(state: dict[str, Any], database: str, user: str, password: str) -> dict[str, Any]:

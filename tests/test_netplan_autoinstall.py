@@ -36,7 +36,7 @@ def test_ready_autoinstall_locks_the_account_and_names_the_disk(ready):
     rendered = render_autoinstall(ready.network, ready.deployment, install_ready=True)
     document = yaml.safe_load(rendered)
     autoinstall = document["autoinstall"]
-    assert autoinstall["storage"]["layout"]["match"] == {"serial": "DISKSERIAL1"}
+    assert autoinstall["storage"]["layout"]["match"] == {"serial": REFUSAL_SERIAL}
     assert autoinstall["storage"]["layout"]["name"] == "direct"
     assert autoinstall["identity"]["password"].startswith("$6$")
     assert autoinstall["ssh"]["authorized-keys"] == ready.deployment["ssh_authorized_keys"]

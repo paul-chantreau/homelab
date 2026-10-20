@@ -17,15 +17,21 @@ else:
     sys.path.insert(0, "/cdrom/maas-deploy")
 
 from maas_deploy.config import INSTALL_MODE, ConfigError, load_config, validate  # noqa: E402
-from maas_deploy.diskmatch import describe, matching_disks, update_installer_serial  # noqa: E402
+from maas_deploy.diskmatch import describe, matching_disks, bind_verified_disk  # noqa: E402
 
 
 def _disks() -> list[dict]:
     raw = subprocess.check_output(
-        ["lsblk", "-J", "-b", "-o", "NAME,KNAME,TYPE,SIZE,MODEL,SERIAL,WWN"],
+        ["lsblk", "-J", "-b", "-o", "NAME,KNAME,TYPE,SIZE,MODEL,SERIAL,WWN,MOUNTPOINTS"],
         text=True,
     )
     devices: list[dict] = []
+
+    def mountpoints(node):
+        points = [p for p in (node.get("mountpoints") or []) if p]
+        for child in node.get("children") or []:
+            points.extend(mountpoints(child))
+        return points
 
     def walk(nodes: list[dict]) -> None:
         for node in nodes:
@@ -38,6 +44,8 @@ def _disks() -> list[dict]:
                     "serial": (node.get("serial") or "").strip(),
                     "wwn": (node.get("wwn") or "").strip(),
                     "by_id_paths": [],
+                    "mounted": bool(mountpoints(node)),
+                    "install_media": any(p in {"/cdrom", "/isodevice"} for p in mountpoints(node)),
                 }
             )
             walk(node.get("children") or [])
@@ -77,7 +85,7 @@ def main() -> int:
         return 1
     if args.autoinstall:
         try:
-            update_installer_serial(args.autoinstall, matches[0], config.deployment["disk"])
+            bind_verified_disk(args.autoinstall, matches[0])
         except (ValueError, OSError, subprocess.CalledProcessError):
             print("Refusing to install: cannot resolve the verified disk for Subiquity. No disk was erased.", file=sys.stderr)
             return 1

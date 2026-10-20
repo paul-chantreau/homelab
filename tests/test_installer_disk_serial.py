@@ -1,92 +1,57 @@
-"""Keep physical serial checks while translating to Subiquity's udev identity."""
-from types import SimpleNamespace
+"""Stable identifiers gate every supported runtime Subiquity selector."""
+from pathlib import Path
+import runpy
+import sys
 
 import pytest
 import yaml
 
-from maas_deploy.autoinstall import render_autoinstall
-from maas_deploy.diskmatch import update_installer_serial
+from maas_deploy.autoinstall import REFUSAL_SERIAL, render_autoinstall
+from maas_deploy.diskmatch import bind_verified_disk, matching_disks
 
 
-@pytest.fixture(params=['wrapped', 'unwrapped'])
+@pytest.fixture(params=['wrapped', 'extracted'])
 def installer(tmp_path, ready, request):
     path = tmp_path / 'autoinstall.yaml'
     document = yaml.safe_load(render_autoinstall(ready.network, ready.deployment, True))
-    if request.param == 'unwrapped':
+    if request.param == 'extracted':
         document = document['autoinstall']
-    path.write_text(yaml.safe_dump(document, sort_keys=False))
+    path.write_text(yaml.safe_dump(document))
     return path
 
 
-@pytest.mark.parametrize('udev_serial', ['VENDOR_MODEL_EXAMPLE123_1', 'EXAMPLE123'])
-def test_verified_disk_uses_full_udev_identity(installer, ready, monkeypatch, udev_serial):
-    # Use synthetic identities, never real machine identifiers in the repository.
+@pytest.mark.parametrize('identity', [{'serial': 'SHORT'}, {'wwn': 'eui.1234'},
+                                       {'by_id': '/dev/disk/by-id/nvme-example'}])
+def test_all_identifiers_resolve_to_the_same_exact_device(installer, identity):
+    devices = [
+        {'name': 'sda', 'type': 'disk', 'serial': 'USB', 'install_media': True},
+        {'name': 'nvme0n1', 'type': 'disk', 'serial': 'SHORT', 'wwn': 'eui.1234',
+         'by_id_paths': ['/dev/disk/by-id/nvme-example']},
+        {'name': 'nvme1n1', 'type': 'disk', 'serial': 'OTHER', 'wwn': 'eui.5678'},
+    ]
+    matches = matching_disks(devices, identity)
+    assert [d['name'] for d in matches] == ['nvme0n1']
+    bind_verified_disk(installer, matches[0])
     document = yaml.safe_load(installer.read_text())
-    config = document.get('autoinstall', document)
-    config['storage']['layout']['match']['serial'] = 'EXAMPLE123'
-    installer.write_text(yaml.safe_dump(document))
-    def run(command, **kwargs):
-        assert command == ['udevadm', 'info', '--query=property', '--name=/dev/nvme0n1']
-        return SimpleNamespace(stdout=f'ID_SERIAL_SHORT=EXAMPLE123\nID_SERIAL={udev_serial}\n')
-    monkeypatch.setattr('maas_deploy.diskmatch.subprocess.run', run)
-    update_installer_serial(installer, {'name': 'nvme0n1'}, {'serial': 'EXAMPLE123'})
-    after = yaml.safe_load(installer.read_text())
-    assert after.get('autoinstall', after)['storage']['layout']['match'] == {'serial': udev_serial}
-    config['storage']['layout']['match']['serial'] = udev_serial
-    assert after == document
-    # Retrying early-commands must preserve an already resolved selector.
-    update_installer_serial(installer, {'name': 'nvme0n1'}, {'serial': 'EXAMPLE123'})
-    assert yaml.safe_load(installer.read_text()) == after
-
-
-@pytest.mark.parametrize('properties', [
-    'ID_SERIAL_SHORT=DISKSERIAL1\n',
-    'ID_SERIAL=MODEL_OTHER\nID_SERIAL_SHORT=OTHER\n',
-])
-def test_unresolved_or_inconsistent_udev_identity_does_not_rewrite(installer, monkeypatch, properties):
+    assert document.get('autoinstall', document)['storage']['layout']['match'] == {'path': '/dev/nvme0n1'}
     before = installer.read_text()
-    monkeypatch.setattr('maas_deploy.diskmatch.subprocess.run', lambda *a, **k: SimpleNamespace(stdout=properties))
-    with pytest.raises(ValueError):
-        update_installer_serial(installer, {'name': 'nvme0n1'}, {'serial': 'DISKSERIAL1'})
-    assert installer.read_text() == before
-
-
-def test_installer_selector_must_match_verified_configuration(installer, monkeypatch):
-    before = installer.read_text()
-    monkeypatch.setattr('maas_deploy.diskmatch.subprocess.run', lambda *a, **k: SimpleNamespace(stdout='ID_SERIAL=MODEL_OTHER\nID_SERIAL_SHORT=OTHER\n'))
-    with pytest.raises(ValueError, match='selector differs'):
-        update_installer_serial(installer, {'name': 'nvme0n1'}, {'serial': 'OTHER'})
-    assert installer.read_text() == before
-
-
-def test_early_command_resolves_before_subiquity_storage_selection(installer):
-    document = yaml.safe_load(installer.read_text())
-    early = document.get('autoinstall', document)['early-commands']
-    assert '--autoinstall /autoinstall.yaml' in early[0]
-
-
-def test_non_serial_selection_is_not_changed(installer):
-    before = installer.read_text()
-    update_installer_serial(installer, {'name': 'nvme0n1'}, {'wwn': 'eui.example'})
+    bind_verified_disk(installer, matches[0])
     assert installer.read_text() == before
 
 
 @pytest.mark.parametrize('content', ['null', '[]', '{}', 'autoinstall: null',
-                                     'storage: {}', 'storage: {layout: {match: []}}', '[bad'])
-def test_invalid_installer_document_fails_without_writing(tmp_path, monkeypatch, content):
+                                    'storage: {}', 'storage: {layout: {match: []}}',
+                                    'storage: {layout: {match: {path: /dev/other}}}', '[bad'])
+def test_invalid_installer_document_never_changes(tmp_path, content):
     path = tmp_path / 'autoinstall.yaml'
     path.write_text(content)
-    monkeypatch.setattr('maas_deploy.diskmatch.subprocess.run', lambda *a, **k: SimpleNamespace(stdout='ID_SERIAL=FULL_SERIAL\nID_SERIAL_SHORT=SHORT\n'))
     with pytest.raises(ValueError):
-        update_installer_serial(path, {'name': 'nvme0n1'}, {'serial': 'SHORT'})
+        bind_verified_disk(path, {'name': 'nvme0n1'})
     assert path.read_text() == content
 
 
 @pytest.mark.parametrize('disk_count', [0, 1, 2])
 def test_preinstall_checks_unique_disk_before_rewriting(installer, ready, tmp_path, monkeypatch, disk_count):
-    import runpy
-    import sys
-    from pathlib import Path
     root = Path(__file__).resolve().parents[1]
     main = runpy.run_path(str(root / 'scripts/preinstall-check.py'))['main']
     network = tmp_path / 'network.yaml'
@@ -97,11 +62,21 @@ def test_preinstall_checks_unique_disk_before_rewriting(installer, ready, tmp_pa
     monkeypatch.setitem(main.__globals__, '_disks', lambda: devices)
     monkeypatch.setattr(sys, 'argv', ['preinstall-check.py', '--network', str(network),
                                      '--deployment', str(deployment), '--autoinstall', str(installer)])
-    monkeypatch.setattr('maas_deploy.diskmatch.subprocess.run', lambda *a, **k: SimpleNamespace(stdout='ID_SERIAL=MODEL_DISKSERIAL1_1\nID_SERIAL_SHORT=DISKSERIAL1\n'))
     before = installer.read_text()
     assert main() == (0 if disk_count == 1 else 1)
-    if disk_count != 1:
-        assert installer.read_text() == before
+    document = yaml.safe_load(installer.read_text())
+    if disk_count == 1:
+        assert document.get('autoinstall', document)['storage']['layout']['match'] == {'path': '/dev/nvme0n1'}
     else:
-        document = yaml.safe_load(installer.read_text())
-        assert document.get('autoinstall', document)['storage']['layout']['match']['serial'] == 'MODEL_DISKSERIAL1_1'
+        assert installer.read_text() == before
+
+
+def test_mounted_disk_and_installation_media_are_never_selected():
+    for flags in [{'mounted': True}, {'install_media': True}]:
+        assert matching_disks([{'name': 'sda', 'type': 'disk', 'serial': 'MATCH', **flags}], {'serial': 'MATCH'}) == []
+
+
+def test_rendered_configuration_cannot_select_a_disk_without_early_check(ready):
+    doc = yaml.safe_load(render_autoinstall(ready.network, ready.deployment, True))['autoinstall']
+    assert doc['storage']['layout']['match'] == {'serial': REFUSAL_SERIAL}
+    assert '--autoinstall /autoinstall.yaml' in doc['early-commands'][0]

@@ -1,6 +1,6 @@
 [Unit]
 Description=Backup the MAAS PostgreSQL database
-After=postgresql.service snap.maas.supervisor.service
+After=postgresql.service snap.maas.pebble.service
 
 [Service]
 Type=oneshot

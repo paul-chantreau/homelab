@@ -38,6 +38,7 @@ autoinstall:
 {% endif %}
   packages:
     - ansible
+    - openssh-client
     - curl
     - iputils-arping
     - iputils-ping
@@ -52,6 +53,7 @@ autoinstall:
   late-commands:
     - mkdir -p /target/opt/maas-deploy /target/var/lib/maas-provision /target/var/log/maas-provision /target/etc/maas-provision /target/usr/local/sbin /target/etc/systemd/system
     - cp -a /cdrom/maas-deploy/. /target/opt/maas-deploy/
+    - chown -R root:root /target/opt/maas-deploy
     - install -m 0644 /cdrom/maas-deploy/systemd/maas-firstboot.service /target/etc/systemd/system/maas-firstboot.service
     - ln -sfn /opt/maas-deploy/scripts/activate-dhcp.sh /target/usr/local/sbin/maas-network-activate
     - ln -sfn /opt/maas-deploy/scripts/deactivate-dhcp.sh /target/usr/local/sbin/maas-network-deactivate
@@ -63,6 +65,16 @@ autoinstall:
     - curtin in-target -- passwd -l {{ admin_user }}
     - curtin in-target -- systemctl enable maas-firstboot.service
   user-data:
+    users:
+      - name: {{ admin_user | tojson }}
+        lock_passwd: true
+        sudo: "ALL=(ALL:ALL) NOPASSWD:ALL"
+        ssh_authorized_keys:
+{% for key in ssh_keys %}
+          - {{ key | tojson }}
+{% else %}
+          []
+{% endfor %}
     runcmd:
       - install -d -m 0750 -o root -g root /var/log/maas-provision /var/lib/maas-provision
   shutdown: reboot

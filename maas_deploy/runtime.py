@@ -9,6 +9,10 @@ from __future__ import annotations
 import json
 import subprocess
 import time
+from urllib.request import urlopen
+from urllib.error import URLError
+
+from maas_deploy.facts import parse_maas_status
 from pathlib import Path
 from typing import Any
 
@@ -86,11 +90,21 @@ def apply_maas(config: LoadedConfig, secrets_path: Path) -> str:
         for line in info.splitlines():
             if line.startswith("tracking:"):
                 channel = line.split(":", 1)[1].strip()
-    initialized = _run(["maas", "status"], check=False).returncode == 0
+    current_config = {}
+    if listed.returncode == 0:
+        config_output = _run(["maas", "config", "--show", "--parsable"]).stdout
+        current_config = dict(line.split("=", 1) for line in config_output.splitlines() if "=" in line)
+        if current_config.get("mode") not in {"none", "region+rack"}:
+            raise SetupError("Existing MAAS mode is incompatible; refusing to reinitialize")
+    initialized = current_config.get("mode") == "region+rack"
     admin_name = config.deployment["maas"]["admin_username"]
     admin_exists = False
     if initialized:
+        _wait_for_maas()
         admin_exists = _run(["maas", "apikey", "--username", admin_name], check=False).returncode == 0
+    if initialized and current_config.get("maas_url") != url:
+        _run(["maas", "config", "--maas-url", url])
+        _wait_for_maas()
     steps = build_steps(
         {
             "snap_installed": listed.returncode == 0,
@@ -116,8 +130,8 @@ def apply_maas(config: LoadedConfig, secrets_path: Path) -> str:
                 ]
             )
             continue
-        if name == "login-and-set-url":
-            _login_and_set_url(config, secrets_path, secrets, url)
+        if name == "login":
+            _login(config, secrets_path)
             continue
         command = list(step["command"])
         if name == "init":
@@ -125,22 +139,34 @@ def apply_maas(config: LoadedConfig, secrets_path: Path) -> str:
             _wait_for_maas()
             continue
         _run(command)
-    return "ready"
+    return "changed" if not initialized or not admin_exists or current_config.get("maas_url") != url else "unchanged"
 
 
-def _login_and_set_url(config: LoadedConfig, secrets_path: Path, secrets: dict[str, str], url: str) -> None:
+def _login(config: LoadedConfig, secrets_path: Path) -> None:
     username = config.deployment["maas"]["admin_username"]
-    key = _run(["maas", "apikey", "--username", username]).stdout.strip()
+    keys = _run(["maas", "apikey", "--username", username]).stdout.splitlines()
+    if not any(line.strip() for line in keys):
+        keys = _run(["maas", "apikey", "--username", username, "--generate"]).stdout.splitlines()
+    key = next((line.strip() for line in keys if line.strip()), "")
+    if not key:
+        raise SetupError("MAAS returned no API key for the configured administrator")
     store_api_key(secrets_path, key)
     _run(["maas", "login", username, "http://127.0.0.1:5240/MAAS/", key])
-    _run(["maas", username, "maas", "set-config", f"name=maas_url", f"value={url}"])
 
 
 def _wait_for_maas() -> None:
     deadline = time.monotonic() + 300
     while time.monotonic() < deadline:
-        if _run(["maas", "status"], check=False).returncode == 0:
-            return
+        result = _run(["maas", "status"], check=False)
+        status = parse_maas_status(result.stdout)
+        if result.returncode == 0 and status["region_active"] and status["rack_active"]:
+            try:
+                with urlopen("http://127.0.0.1:5240/MAAS/api/2.0/version/", timeout=5) as response:
+                    version = json.load(response)
+                if version.get("version"):
+                    return
+            except (URLError, OSError, ValueError):
+                pass
         time.sleep(5)
     raise SetupError("MAAS did not become ready after initialization")
 
@@ -160,11 +186,16 @@ def inventory(profile: str) -> dict[str, Any]:
             item = dict(vlan)
             item["fabric_id"] = fabric.get("id")
             vlans.append(item)
+    racks = _maas_json(profile, "rack-controllers", "read")
+    interfaces = []
+    if len(racks) == 1 and racks[0].get("system_id"):
+        interfaces = _maas_json(profile, "interfaces", "read", racks[0]["system_id"])
     return {
+        "interfaces": interfaces,
         "subnets": _maas_json(profile, "subnets", "read"),
         "vlans": vlans,
         "ipranges": _maas_json(profile, "ipranges", "read"),
-        "racks": _maas_json(profile, "rack-controllers", "read"),
+        "racks": racks,
     }
 
 
@@ -201,13 +232,11 @@ def apply_network(config: LoadedConfig, secrets_path: Path) -> str:
 
 
 def apply_images(config: LoadedConfig, secrets_path: Path, marker: Path) -> str:
-    if marker.exists():
-        return "already-synced"
     secrets = load(secrets_path)
     profile = config.deployment["maas"]["admin_username"]
     _run(["maas", "login", profile, "http://127.0.0.1:5240/MAAS/", secrets["MAAS_API_KEY"]])
     release = config.deployment["maas"]["image_release"]
-    resources = _maas_json(profile, "boot-resources", "read")
+    resources = _image_resources(profile, release)
     if _image_synced(resources, release):
         marker.parent.mkdir(parents=True, exist_ok=True)
         marker.write_text("synced\n", encoding="utf-8")
@@ -241,7 +270,7 @@ def apply_images(config: LoadedConfig, secrets_path: Path, marker: Path) -> str:
         time.sleep(15)
     else:
         raise SetupError("Ubuntu image import did not finish")
-    resources = _maas_json(profile, "boot-resources", "read")
+    resources = _image_resources(profile, release)
     if not _image_synced(resources, release):
         raise SetupError(f"Ubuntu {release} image is not synced")
     marker.parent.mkdir(parents=True, exist_ok=True)
@@ -249,11 +278,25 @@ def apply_images(config: LoadedConfig, secrets_path: Path, marker: Path) -> str:
     return "synced"
 
 
+def _image_resources(profile: str, release: str) -> list[dict]:
+    resources = _maas_json(profile, "boot-resources", "read")
+    return [
+        _maas_json(profile, "boot-resource", "read", str(resource["id"]))
+        for resource in resources
+        if resource.get("name") == f"ubuntu/{release}" and str(resource.get("architecture", "")).startswith("amd64/")
+    ]
+
+
 def _image_synced(resources: Any, release: str) -> bool:
     if not isinstance(resources, list):
         return False
     for resource in resources:
-        name = str(resource.get("name", ""))
-        if resource.get("type") == "Synced" and f"ubuntu/{release}" in name:
-            return True
+        if resource.get("type") != "Synced" or resource.get("name") != f"ubuntu/{release}":
+            continue
+        if not str(resource.get("architecture", "")).startswith("amd64/"):
+            continue
+        for resource_set in (resource.get("sets") or {}).values():
+            files = resource_set.get("files") or {}
+            if resource_set.get("complete") is True and files and all(f.get("complete") is True for f in files.values()):
+                return True
     return False

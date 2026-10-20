@@ -398,9 +398,7 @@ lsblk -d -o NAME,MODEL,SERIAL,WWN,SIZE,TYPE
 ls -l /dev/disk/by-id/
 ```
 
-For serial-based selection, the early-command check verifies the hardware serial from `lsblk`, then rewrites only the installer's serial selector in `/autoinstall.yaml` to the verified device's udev `ID_SERIAL`. NVMe devices can expose a short hardware serial and a longer model/serial/namespace identifier to Subiquity. Keep the short hardware serial in `DISK_SERIAL`; do not replace it with the longer udev identifier. Missing or inconsistent identity information stops installation.
-
-The early-command check prints the one disk it is about to erase. If the serial, WWN, or by-id path matches zero disks or more than one disk, the installer stops and erases nothing. An incomplete configuration is rendered with the impossible serial `REFUSING-INCOMPLETE-CONFIG-NO-DISK-MATCH`, so a skipped check still cannot match a real disk.
+Every rendered ISO starts with an impossible disk selector. The early-command verifies exactly one unmounted disk using the configured serial, WWN and/or by-id alias, excludes mounted installation media, then binds Subiquity to that verified device's exact runtime path in `/autoinstall.yaml`. Kernel names are never accepted as user-provided identity. Keep the hardware's short serial in `DISK_SERIAL`; no manual conversion to a udev serial is needed. Missing, ambiguous or mounted targets stop installation before partitioning.
 
 ### What install mode generates
 
@@ -568,7 +566,7 @@ PostgreSQL and MAAS logs:
 
 ```bash
 sudo journalctl -u postgresql
-sudo journalctl -u snap.maas.supervisor.service
+sudo journalctl -u snap.maas.pebble.service
 sudo maas status
 ```
 
@@ -576,70 +574,13 @@ sudo maas status
 
 ## M. Validating the VLAN
 
-Run this on the installed server after section F is done. The VLAN interface being up only proves that Ubuntu created a VLAN device. It does not prove the GS724T membership or PVID.
+After the physical switch configuration and controller installation, follow the [correlated capture/probe procedure](docs/review-fixes.md#revised-physical-acceptance-procedure). It requires a separate wired management observer and a temporary provisioning host with the configured static test address, Python 3 and `iputils-arping`. The observer needs the checkout's helper/package, `ip` and `tcpdump`.
 
-Outcomes are `PASS`, `FAIL`, and `INCONCLUSIVE`. Exit codes are 0, 1, and 2. Usage errors exit 3. Any critical `FAIL` or `INCONCLUSIVE` blocks DHCP. A capture that sees no DHCP replies is not isolation evidence.
+The controller checks interface MAC/link/address/routes, bidirectional connectivity, actual VLAN ID, a fresh switch confirmation, a complete DHCP capture, and a management capture covering a one-use-token broadcast probe. Failed/short/stale captures, incorrect observer networks and missing evidence give FAIL or INCONCLUSIVE, never an empty PASS. A successful test establishes the observed broadcast behaviour for this configuration, not every possible network-security property.
 
-Prepare a temporary host:
+Run `sudo maas-network-confirm-switch` only after inspecting VLAN membership and PVID in the switch UI. This confirmation is valid for 24 hours and the current configuration hash. Use `sudo maas-network-validate --isolation-report /tmp/isolation-report.json` for validation only, or use activation directly as described below. The script prints the temporary host's exact command, including a fresh `--token`, then waits for the matching completed observer report.
 
-1. Plug it into one provisioning port from the worksheet.
-2. Give it the static address in `network.provisioning.acceptance.test_host`, with the provisioning prefix, and no default gateway.
-3. Disable its DHCP client so it cannot answer or request a lease.
-4. Copy `scripts/provisioning-test-host.sh` to it.
-
-Prepare a second host on the management LAN. This host must not be the MAAS server. Copy `scripts/observe-management-lan.sh` to it. Its capture is the isolation evidence.
-
-On the MAAS server, after you have looked at the switch pages:
-
-```bash
-sudo maas-network-confirm-switch
-```
-
-Type the line it prints: `CONFIRM GS724T GS724Tv4 VLAN 100`, using the provisioning VLAN ID from the YAML if you did not keep 100. The confirmation is stored in `/var/lib/maas-provision/gs724t-confirmation.json` and is valid for 24 hours, and only for the current configuration hash.
-
-On the management-LAN observer, start a capture of at least 20 seconds while the test host is exchanging traffic. Thirty seconds is the script default:
-
-```bash
-sudo ./observe-management-lan.sh \
-  --interface <observer-nic> \
-  --vlan 100 \
-  --host <test-host-address> \
-  --seconds 30 \
-  --maas-mac <server-nic-mac> \
-  --output isolation-report.json
-```
-
-While that capture runs, from the test host, ping the controller and send the reverse probe. The validation script on the server also pings and ARPs. Generate that traffic during the capture window:
-
-```bash
-sudo ./provisioning-test-host.sh --controller <controller-address>
-```
-
-The observer script refuses to run if `--maas-mac` matches a NIC on the observer. A capture on the MAAS trunk is supposed to see VLAN 100 and cannot prove isolation. Copy `isolation-report.json` to the MAAS server.
-
-On the MAAS server, run the acceptance script. It checks the NIC, MAC, link, management address, management gateway, default route, VLAN interface, VLAN ID, provisioning address, provisioning subnet, bidirectional connectivity, the isolation report, unexpected DHCP, the DHCP range, MAAS region and rack, and the switch confirmation:
-
-```bash
-sudo maas-network-validate --isolation-report /path/to/isolation-report.json
-```
-
-When the script tells you to, run this on the test host within the 45 second listen window:
-
-```bash
-sudo ./provisioning-test-host.sh --controller <controller-address>
-```
-
-Bidirectional success means the server can ping the test host, ARP answers on the `provisioning` interface, and the test host opens TCP port 19999 and sends a line beginning with `PROVISIONING-TEST-OK`.
-
-The report is `/var/lib/maas-provision/vlan-validation.json`. DHCP activation accepts it only when the outcome is `PASS`, every critical check is `PASS`, the configuration hash matches, and `generated_at` is less than two hours old.
-
-These checks are not switch proof:
-
-- `ip -d link show provisioning` showing id 100.
-- The management gateway answering ping.
-- An empty DHCP capture by itself.
-
-The switch proof is the web-interface confirmation plus a management-LAN capture whose `packet_count` is 0, taken on a different host, for at least 20 seconds, watching the test host. A packet count above 0 is a `FAIL`. A missing report is `INCONCLUSIVE`.
+Validation is written to `/var/lib/maas-provision/vlan-validation.json`. Activation requires all critical checks to PASS, a matching configuration hash and a report less than two hours old. The underlying capture/probe must be correlated and less than five minutes old when validation runs.
 
 ## N. Activating MAAS DHCP
 
@@ -738,9 +679,9 @@ Ansible or cloud-init. `/var/log/cloud-init-output.log`, `/var/log/maas-provisio
 
 ## R. Maintenance and disaster recovery
 
-Health. A timer runs `maas-healthcheck` about five minutes after boot and then every 15 minutes. You can run `sudo maas-healthcheck` any time. It checks that PostgreSQL is active, region and rack are running, DHCP matches the marker file, disk use on `/` is under 80 percent, and the secrets file is mode `0600`. While `dhcpd` is running, this check cannot see which VLAN MAAS enabled. The activation command is what refuses the management VLAN. Do not treat a green health check during DHCP as a fresh isolation test.
+Health. A timer runs `maas-healthcheck` about five minutes after boot and then every 15 minutes. You can run `sudo maas-healthcheck` any time. It checks that PostgreSQL is active, region and rack are running, DHCP matches the marker file, disk use on `/` is under 80 percent, and the secrets file is mode `0600`. The check queries MAAS for the actual VLAN configuration, so a correctly active provisioning DHCP does not cause an automatic management-DHCP failure. It still does not replace a fresh physical isolation test.
 
-Backups. A timer runs `maas-backup` daily at 02:30 with up to 30 minutes of delay. The dump is a PostgreSQL custom-format file, `/var/backups/maas/maas-YYYYMMDDTHHMMSSZ.dump`, mode `0600`. The newest files are kept, up to `deployment.backup.retain`. If `offhost_target` is set, each new dump is also sent with `rsync`. Put the off-host copy on a different machine. A dump that exists only on the MAAS disk is lost with the disk.
+Backups. A timer runs `maas-backup` daily at 02:30 with up to 30 minutes of delay. The dump is a PostgreSQL custom-format file, `/var/backups/maas/maas-TIMESTAMP.dump`, mode `0600`. Each completed dump has a mode-0600 `.config.tar.gz` companion containing effective configuration and credentials. The newest completed dump/bundle pairs are kept, up to `deployment.backup.retain`. If `offhost_target` is set, each new dump is also sent with `rsync`. Put the off-host copy on a different machine. A dump that exists only on the MAAS disk is lost with the disk.
 
 Run a backup by hand:
 
@@ -748,17 +689,17 @@ Run a backup by hand:
 sudo maas-backup
 ```
 
-Restore replaces the MAAS database. It stops the MAAS snap, drops the database, creates it, runs `pg_restore --no-owner`, and starts the snap:
+Restore requires an initialized controller with compatible credentials and MAAS migrations. It verifies the archive in a separate database before stopping MAAS, then swaps database names and checks API/service readiness. The original database remains as a rollback copy; a failed availability check restores its name:
 
 ```bash
 sudo maas-restore --confirm RESTORE /var/backups/maas/maas-TIMESTAMP.dump
 ```
 
-This restore path is implemented and has not been executed against a live MAAS database in the virtual tests. Practice it before you depend on it. Take a fresh dump first.
+Real PostgreSQL 16 integration tests cover successful restore, invalid archive rejection, schema mismatch and rollback on failed readiness. MAAS stop/start is simulated in that database test; physical disaster recovery still requires a rehearsal. Take a fresh dump first.
 
-MAAS configuration backup is the PostgreSQL dump. The YAML in `/opt/maas-deploy/config` is the source for Netplan and for the network plan. Keep a copy of the finished YAML with the off-host backups. The secrets file must be copied by hand to a place you control. It is not inside the SQL dump.
+MAAS configuration backup is the PostgreSQL dump. The YAML in `/opt/maas-deploy/config` is the source for Netplan and for the network plan. Keep a copy of the finished YAML with the off-host backups. The secrets file is included in the protected companion configuration bundle, not the SQL dump. Copy both files off the server. Neither alone is a complete snap/hardware recovery image.
 
-Logging. First-boot and Ansible logs are under `/var/log/maas-provision/`. Service logs are `journalctl -u postgresql`, `journalctl -u maas-firstboot.service`, and `journalctl -u snap.maas.supervisor.service`.
+Logging. First-boot and Ansible logs are under `/var/log/maas-provision/`. Service logs are `journalctl -u postgresql`, `journalctl -u maas-firstboot.service`, and `journalctl -u snap.maas.pebble.service`.
 
 Storage. `sudo maas-healthcheck` includes disk percentage. Images and PostgreSQL both live on the system disk. Expand or archive before 80 percent.
 
@@ -829,3 +770,7 @@ Those tests are static checks and virtual-machine checks. They do not program a 
 ## Network filtering
 
 See [Network security options](docs/network-security.md) for server firewall and GS724Tv4 ACL recommendations. No host firewall is currently installed by this repository; routing is disabled, but that does not filter access to the controller itself.
+
+## Corrective validation
+
+See [review corrections and integration tests](docs/review-fixes.md) for the reviewed defects, their fixes, the revised physical acceptance workflow, and the distinction between unit, PostgreSQL and full-VM validation. The manual **Full ISO installation smoke test** boots the real ISO without installation Secrets; it checks UEFI installation, MAAS, installed commands, backup, rerun and reboot.

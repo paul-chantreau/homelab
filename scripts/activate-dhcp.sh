@@ -4,7 +4,8 @@
 set -euo pipefail
 set +x
 
-ROOT="${MAAS_DEPLOY_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+SCRIPT_PATH="$(readlink -f -- "${BASH_SOURCE[0]}")"
+ROOT="${MAAS_DEPLOY_ROOT:-$(cd "$(dirname "${SCRIPT_PATH}")/.." && pwd)}"
 STATE="${MAAS_STATE_DIR:-/var/lib/maas-provision}"
 export MAAS_DEPLOY_ROOT="$ROOT"
 export MAAS_STATE_DIR="$STATE"

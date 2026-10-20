@@ -10,7 +10,7 @@ from pathlib import Path
 from maas_deploy.backup import select_expired
 from maas_deploy.discovery import assemble, summary
 from maas_deploy.diskmatch import matching_disks
-from maas_deploy.facts import dhcp_offer_count, interfaces_from_ip, parse_maas_status
+from maas_deploy.facts import interfaces_from_ip, parse_maas_status
 from maas_deploy.grub import AUTOINSTALL_ARG, patch_grub
 from maas_deploy.postgres_setup import merge_hba, plan
 from maas_deploy.secrets import ensure, load
@@ -55,7 +55,6 @@ def test_ip_json_preserves_vlan_id_and_dhcp_offers():
         ),
     )
     assert interfaces[0]["vlan_id"] == 100
-    assert dhcp_offer_count("0.0.0.0.67 > 255.255.255.255.68: BOOTP/DHCP, Reply, message-type Offer") == 1
     status = parse_maas_status("rackd                            RUNNING\nregiond                          RUNNING\ndhcpd                            STOPPED\n")
     assert status["rack_active"] is True
     assert status["dhcp_active"] is False
@@ -63,7 +62,7 @@ def test_ip_json_preserves_vlan_id_and_dhcp_offers():
 
 def test_postgres_plan_is_idempotent():
     first = plan({"role_exists": False, "database_exists": False, "hba": "local all all peer\n"}, "maas", "maas", "secret")
-    assert first["role_sql"].startswith("CREATE ROLE maas")
+    assert first["role_sql"].startswith('CREATE ROLE "maas"')
     assert "secret" in first["role_sql"]
     second = plan({"role_exists": True, "database_exists": True, "hba": first["hba"]}, "maas", "maas", "secret")
     assert second["role_sql"] is None

@@ -4,6 +4,7 @@
     name:
       - ansible
       - ca-certificates
+      - openssh-client
       - curl
       - iputils-arping
       - iputils-ping
@@ -73,3 +74,6 @@
     - /var/log/maas-provision
     - /etc/maas-provision
     - "{{ deployment.backup.directory }}"
+
+- name: Apply system safety settings before starting MAAS
+  ansible.builtin.meta: flush_handlers

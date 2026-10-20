@@ -63,7 +63,7 @@ def stage_payload(source_root: Path, destination: Path, config: LoadedConfig, re
     autoinstall = destination / "autoinstall"
     autoinstall.mkdir(parents=True, exist_ok=True)
     (autoinstall / "user-data").write_text(
-        render_autoinstall(config.network, config.deployment, ready),
+        render_autoinstall(config.network, config.deployment, ready, template_dir=source_root / "autoinstall"),
         encoding="utf-8",
     )
     (autoinstall / "meta-data").write_text(render_meta_data(config.deployment), encoding="utf-8")

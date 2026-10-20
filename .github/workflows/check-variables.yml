@@ -17,7 +17,7 @@ jobs:
       - name: Install configuration tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y python3-yaml
+          sudo apt-get install -y openssh-client python3-yaml
       - name: Validate repository variables
         uses: ./.github/actions/check-variables
         with:

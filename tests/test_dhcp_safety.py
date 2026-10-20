@@ -10,6 +10,7 @@ from maas_deploy.maas_network import PlanError, plan_disable, plan_enable, plan_
 
 
 def _facts(ready):
+    now = datetime.now(timezone.utc)
     return {
         "interfaces": [
             {
@@ -33,16 +34,22 @@ def _facts(ready):
             "address": "198.51.100.50",
             "ping": True,
             "arping": True,
-            "reverse_tcp": True,
+            "probe": {"verified_broadcast": True, "peer_address": "198.51.100.50",
+                      "broadcast_started_at": (now - timedelta(seconds=20)).isoformat(),
+                      "broadcast_finished_at": (now - timedelta(seconds=18)).isoformat()},
         },
         "isolation_report": {
             "captured_on_maas_server": False,
             "vlan_id": 100,
             "observed_host": "198.51.100.50",
             "seconds": 30,
+            "capture_complete": True,
+            "management_subnet": "192.0.2.0/24",
+            "started_at": (now - timedelta(seconds=40)).isoformat(),
+            "finished_at": (now - timedelta(seconds=10)).isoformat(),
             "packet_count": 0,
         },
-        "dhcp_capture": {"ran": True, "offer_count": 0},
+        "dhcp_capture": {"ran": True, "capture_complete": True, "seconds": 15, "offer_count": 0, "server_reply_count": 0},
         "maas_rack": {"present": True, "region_active": True, "rack_active": True, "dhcp_active": False},
         "switch_confirmation": {
             "phrase_ok": True,
@@ -58,19 +65,24 @@ def _inventory():
             {
                 "id": 1,
                 "cidr": "198.51.100.0/24",
-                "vlan": {"fabric_id": 1, "vid": 100, "dhcp_on": False},
+                "managed": True,
+                "vlan": {"id": 10, "fabric_id": 1, "vid": 100, "dhcp_on": False},
             },
             {
                 "id": 2,
                 "cidr": "192.0.2.0/24",
-                "vlan": {"fabric_id": 0, "vid": 1, "dhcp_on": True},
+                "vlan": {"id": 11, "fabric_id": 0, "vid": 1, "dhcp_on": True},
             },
         ],
         "vlans": [
             {"id": 10, "fabric_id": 1, "vid": 100, "dhcp_on": False},
             {"id": 11, "fabric_id": 0, "vid": 1, "dhcp_on": True},
         ],
-        "ipranges": [],
+        "interfaces": [
+            {"id": 1, "name": "eth0", "type": "physical", "mac_address": "52:54:00:12:34:56", "vlan": {"id": 11, "vid": 0}},
+            {"id": 2, "name": "provisioning", "type": "vlan", "parents": ["eth0"], "mac_address": "52:54:00:12:34:56", "vlan": {"id": 10, "vid": 100}},
+        ],
+        "ipranges": [{"subnet": {"id": 1}, "type": "dynamic", "start_ip": "198.51.100.100", "end_ip": "198.51.100.200"}],
         "racks": [{"system_id": "rack1"}],
     }
 
@@ -103,7 +115,7 @@ def test_inconclusive_isolation_blocks_dhcp(ready):
 
 def test_unexpected_dhcp_and_leaked_vlan_fail(ready):
     facts = _facts(ready)
-    facts["dhcp_capture"] = {"ran": True, "offer_count": 1}
+    facts["dhcp_capture"].update(offer_count=1, server_reply_count=1)
     facts["isolation_report"]["packet_count"] = 2
     report = evaluate(ready.network, facts, ready.canonical_hash)
     assert report["outcome"] == "FAIL"
@@ -118,7 +130,7 @@ def test_initial_plan_disables_management_dhcp_and_does_not_enable_provisioning(
     management = [command for command in rendered if "dhcp_on=false" in command and " 0 1 " in f" {command} "]
     assert management
     ranges = [action for action in actions if action["op"] == "iprange-create"]
-    assert {item["args"]["type"] for item in ranges} == {"reserved", "dynamic"}
+    assert {item["args"]["type"] for item in ranges} == {"reserved"}
     assert any(item["args"]["start_ip"] == "198.51.100.2" for item in ranges)
 
 
