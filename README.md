@@ -235,7 +235,7 @@ Copy the full line beginning with `ssh-ed25519`, `ssh-rsa`, or another supported
 
 After entering the required values, run **Actions → Check installation variables → Run workflow**. It checks missing inputs, disk alternatives, defaults, and network consistency. Future ISO builds embed the resolved settings; changing GitHub settings does not update an already installed server. Booting the built ISO authorizes erasure of the identified target disk.
 
-The MAAS and PostgreSQL passwords are generated on the server in `/etc/maas-provision/secrets.env`; do not create password Secrets for them. GS724Tv4 hardware assumptions, isolation policy, and explicit DHCP activation are fixed behavior, not optional inputs. See [the Actions configuration guide](docs/actions-variables.md) for migration and configuration helpers.
+The MAAS and PostgreSQL passwords are generated on the server in `/etc/maas-provision/secrets.env`; do not create password Secrets for them. GS724Tv4 hardware assumptions, isolation policy, and explicit DHCP activation are fixed behavior, not optional inputs.
 
 ## 6. Architecture overview
 
@@ -363,7 +363,7 @@ balenaEtcher on Windows, macOS, or Linux:
 
 ## 8. Validating the VLAN
 
-After the physical switch configuration and controller installation, follow the [correlated capture/probe procedure](docs/review-fixes.md#revised-physical-acceptance-procedure). It requires a separate wired management observer and a temporary provisioning host statically configured with the `PROVISIONING_TEST_HOST` Secret address, Python 3 and `iputils-arping`. The observer needs the checkout's helper/package, `ip` and `tcpdump`.
+After the physical switch configuration and controller installation, validate the VLAN using a separate wired management observer and a temporary provisioning host statically configured with the `PROVISIONING_TEST_HOST` Secret address, Python 3 and `iputils-arping`. The observer needs the checkout's helper/package, `ip` and `tcpdump`.
 
 The controller checks interface MAC/link/address/routes, bidirectional connectivity, actual VLAN ID, a fresh switch confirmation, a complete DHCP capture, and a management capture covering a one-use-token broadcast probe. Failed/short/stale captures, incorrect observer networks and missing evidence give FAIL or INCONCLUSIVE, never an empty PASS. A successful test establishes the observed broadcast behaviour for this configuration, not every possible network-security property.
 
