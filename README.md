@@ -16,18 +16,16 @@ You will also need an out-of-band or local console access to reach the Netgear G
 
 ## 2. Network discovery and management settings
 
-Run discovery on a computer connected to the existing management LAN.
+You can collect management LAN settings from the console or read them in the router's management web interface. Then enter the corresponding **repository Actions Secrets** using [section 5](#5-github-actions-secrets-and-variables).
+
+### Option 1: print the settings in the console
+
+Run discovery on a computer connected to the existing management LAN. The scripts print a readable interface summary and `NAME=value` lines. They do not save report files or change GitHub settings.
 
 On Windows PowerShell, from the repository directory:
 
 ```powershell
 .\scripts\discover-network.ps1
-```
-
-This writes `network-discovery.json`. To check the workstation's IPv4 prefix as well:
-
-```powershell
-Get-NetIPAddress -AddressFamily IPv4 | Select-Object InterfaceAlias,IPAddress,PrefixLength
 ```
 
 On Linux:
@@ -36,21 +34,51 @@ On Linux:
 scripts/discover-network.sh
 ```
 
-This writes `network-discovery.json` and `network-discovery.txt` using `ip`, `networkctl`, and `resolvectl`. Keep discovery reports in private local notes.
+If several interfaces have a default gateway, select the adapter connected to the management LAN explicitly:
 
-Check the router's current LAN subnet, DHCP scope, gateway, and DNS settings. Find the switch management IP in the router's DHCP lease table by matching the MAC on the switch label. In the switch UI, read the existing management VLAN and port PVIDs.
+```powershell
+.\scripts\discover-network.ps1 -InterfaceAlias "Wi-Fi"
+```
 
-Then create these **repository Actions Secrets**, using the Settings procedure in [section 5](#5-github-actions-secrets-and-variables):
+```bash
+scripts/discover-network.sh --interface eth0
+```
+
+Replace `Wi-Fi` or `eth0` with the actual interface name shown in the summary. Example console output, using documentation addresses:
+
+```text
+Local details (this computer, not the MAAS server identity):
+LOCAL_INTERFACE=Wi-Fi
+LOCAL_ADDRESS=192.0.2.20/24
+LOCAL_MAC=aa:bb:cc:dd:ee:ff
+
+GitHub Actions Secrets (confirm detected gateway/DNS in the router UI):
+MANAGEMENT_INTERFACE_MAC=<MAAS_SERVER_ETHERNET_MAC>
+MANAGEMENT_ADDRESS=<UNUSED_MAAS_SERVER_IPV4>/24
+MANAGEMENT_GATEWAY=192.0.2.1
+MANAGEMENT_DNS=["192.0.2.1"]
+MANAGEMENT_VLAN_ID=<MANAGEMENT_VLAN_FROM_SWITCH_UI>
+```
+
+Copy the detected gateway and DNS values after confirming they belong to your management LAN. Replace every `<...>` placeholder with the requested value. If gateway or DNS information is missing, the script also prints a placeholder for it. `LOCAL_*` lines describe the computer running discovery and are not GitHub inputs. All five `MANAGEMENT_*` inputs are **Secrets**, not Variables.
+
+### Option 2: use the router and switch web interfaces
+
+Instead of running a discovery script, open your router's management web interface. Its LAN, DHCP, and DNS pages show the LAN subnet/prefix, current DHCP pool, router address, and DNS settings. Its connected-device or DHCP lease list can help identify the MAAS server and switch by their MAC addresses. This gives the same gateway/DNS information you need to enter manually.
+
+Open the Netgear switch's web interface to read the existing management VLAN and port PVIDs. These switch settings cannot be reliably inferred from the router's LAN page or a workstation's IP address.
+
+### Enter the matching GitHub Secrets
 
 | Secret | What to enter and where to find it |
 | --- | --- |
-| `MANAGEMENT_INTERFACE_MAC` | The MAAS server's physical Ethernet MAC from its firmware, NIC label, or `ip link` on that server. Do not use the workstation's Wi-Fi MAC or the switch MAC. |
+| `MANAGEMENT_INTERFACE_MAC` | The MAAS server's physical Ethernet MAC from its firmware, NIC label, or its own interface details. A router device entry is usable only after confirming it is that server. |
 | `MANAGEMENT_ADDRESS` | Choose an unused fixed IPv4 address for the MAAS server on the existing LAN, including its prefix, such as `192.0.2.10/24`. Keep it outside the dynamic DHCP pool or explicitly reserved for this server. |
-| `MANAGEMENT_GATEWAY` | The existing router's IPv4 address on that LAN, confirmed in the router UI. |
-| `MANAGEMENT_DNS` | Reachable IPv4 DNS resolvers as a nonempty JSON list, such as `["192.0.2.1"]`. Confirm the values in the router settings or discovery report. |
-| `MANAGEMENT_VLAN_ID` | The existing untagged management VLAN/PVID from the switch UI, as an integer. Do not change the switch management VLAN to match an example. |
+| `MANAGEMENT_GATEWAY` | The existing router's LAN IPv4 address, detected in the console or read from the router UI. |
+| `MANAGEMENT_DNS` | Reachable IPv4 DNS resolvers as a nonempty JSON list, such as `["192.0.2.1"]`. Confirm detected values against the router DNS settings. |
+| `MANAGEMENT_VLAN_ID` | The existing untagged management VLAN/PVID from the switch UI, as an integer. |
 
-The computer's own address identifies the LAN and prefix; `MANAGEMENT_ADDRESS` is the separate address chosen for the MAAS server.
+The computer's address supplies the LAN prefix; it does not select a free MAAS server address. If discovery runs on your workstation, do not use its address or MAC as the MAAS server identity. Neither option changes router reservations, the switch management VLAN, or the server's address automatically.
 
 Choose the provisioning network and its Secrets in [section 4](#4-vlan-configuration).
 
