@@ -1,8 +1,6 @@
 # Production MAAS on one Ubuntu server and a Netgear GS724Tv4
 
-This repository builds an Ubuntu Server 24.04 LTS autoinstall ISO, boots it from USB, and lets Ansible on that machine install MAAS with a local PostgreSQL database. The switch is configured by hand in its web interface. MAAS DHCP stays off until a person validates the provisioning VLAN and types an explicit confirmation.
-
-This deployment assumes the switch is a Netgear GS724Tv4. The configuration and procedures use that fixed model.
+This repository builds an Ubuntu Server autoinstall ISO, boots it from USB, and lets Ansible on that machine install MAAS. It assumes the switch is a Netgear GS724Tv4 ; the configuration and procedures use that fixed model.
 
 Record all of the following before changing a port, building an ISO, or installing Ubuntu:
 
@@ -450,24 +448,22 @@ sha256sum -c build/SHA256SUMS
 
 The local build needs `xorriso`, `curl`, and the Python packages listed in `requirements-dev.txt` (`PyYAML`, `jsonschema`, `Jinja2`). For a local build, fill `deployment.ssh_authorized_keys` in `config/deployment.yaml`; local builds do not read GitHub Actions variables.
 
-## J. Writing the USB installer
+## J. Writing the USB bootable installer
 
 Use a USB disk you can overwrite. Either tool writes the ISO image as a whole disk image so the El Torito and EFI boot images stay intact.
 
 Rufus on Windows:
 
-1. Select the USB drive.
-2. Select `ubuntu-maas-autoinstall.iso`.
-3. If Rufus offers ISO mode and DD mode, choose DD mode.
-4. Start, and accept the warning that the USB drive will be erased.
+1. Select the USB drive ;
+2. Select `ubuntu-maas-autoinstall.iso`;
+3. If Rufus offers ISO mode and DD mode, choose DD mode. DD mode copies the ISO byte for byte, preserving its boot partitions, EFI loader, and customized GRUB configuration. ISO mode extracts the files and rebuilds the USB’s boot structure. The latter can work, but can introduce changes made by Rufus in the installation process ;
+4. Start.
 
 balenaEtcher on Windows, macOS, or Linux:
 
-1. Flash from file, and select the ISO.
-2. Select the USB drive.
+1. Flash from file, and select the ISO ;
+2. Select the USB drive ;
 3. Flash.
-
-Confirm the SHA256 before you flash. After writing, the USB drive may show a small filesystem. That is the ISO9660 view of the image. Do not format it again.
 
 ## K. Installing Ubuntu
 
