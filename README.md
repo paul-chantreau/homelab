@@ -346,16 +346,14 @@ Keep the provisioning VLAN isolated. When a deployed machine needs general netwo
 
 ## 7. Writing the USB bootable installer
 
-Use a USB disk you can overwrite. Either tool writes the ISO image as a whole disk image so the El Torito and EFI boot images stay intact.
-
-Rufus on Windows:
+Using Rufus on Windows:
 
 1. Select the USB drive ;
 2. Select `ubuntu-maas-autoinstall.iso`;
 3. If Rufus offers ISO mode and DD mode, choose DD mode. DD mode copies the ISO byte for byte, preserving its boot partitions, EFI loader, and customized GRUB configuration. ISO mode extracts the files and rebuilds the USB’s boot structure. The latter can work, but can introduce changes made by Rufus in the installation process ;
 4. Start.
 
-balenaEtcher on Windows, macOS, or Linux:
+Using balenaEtcher on Windows, macOS, or Linux:
 
 1. Flash from file, and select the ISO ;
 2. Select the USB drive ;
