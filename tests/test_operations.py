@@ -60,10 +60,22 @@ def test_secrets_survive_a_second_call(tmp_path):
     path = tmp_path / "secrets.env"
     assert ensure(path) == "created"
     first = load(path)
+    assert len(first["MAAS_ADMIN_PASSWORD"]) == 12
+    assert set(first["MAAS_ADMIN_PASSWORD"]) <= set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
+    assert len(first["POSTGRES_PASSWORD"]) == 43
     assert ensure(path) == "exists"
     assert load(path) == first
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
     assert "POSTGRES_PASSWORD" not in path.name
+
+
+def test_existing_long_maas_password_is_not_shortened(tmp_path):
+    path = tmp_path / 'secrets.env'
+    content = f"POSTGRES_PASSWORD=existing-database-password\nMAAS_ADMIN_PASSWORD={'x' * 43}\nMAAS_API_KEY=existing:key:value\n"
+    path.write_text(content)
+    path.chmod(0o600)
+    assert ensure(path) == 'exists'
+    assert path.read_text() == content
 
 
 def test_grub_patch_escapes_the_datasource_semicolon():

@@ -22,7 +22,10 @@ def ensure(path: Path) -> str:
             _tighten(path)
             load(path)
             return "exists"
-        values = {key: secrets.token_urlsafe(32) for key in KEYS}
+        values = {
+            "POSTGRES_PASSWORD": secrets.token_urlsafe(32),
+            "MAAS_ADMIN_PASSWORD": secrets.token_urlsafe(9),  # Exactly 12 URL-safe characters.
+        }
         _write(path, values)
         return "created"
 

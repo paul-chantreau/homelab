@@ -392,7 +392,7 @@ http://<management-address>:5240/MAAS/
 
 On the server console, `http://127.0.0.1:5240/MAAS/` also works. The URL stored in MAAS for enlisted machines is `http://<controller-address>:5240/MAAS/`, which is the `PROVISIONING_CONTROLLER_ADDRESS` Secret.
 
-The username is the `MAAS_ADMIN_USERNAME` Variable (`admin` by default). The password is generated locally as `MAAS_ADMIN_PASSWORD` in `/etc/maas-provision/secrets.env`; it is not a GitHub Secret. The Linux SSH account is the separate `ADMIN_USER` Variable (`maasadmin` by default).
+The username is the `MAAS_ADMIN_USERNAME` Variable (`admin` by default). New installations generate a 12-character random password locally as `MAAS_ADMIN_PASSWORD` in `/etc/maas-provision/secrets.env`; it is not a GitHub Secret. Existing credentials are reused on subsequent runs. The Linux SSH account is the separate `ADMIN_USER` Variable (`maasadmin` by default).
 
 After login, confirm:
 
