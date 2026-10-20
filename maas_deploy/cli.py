@@ -8,6 +8,7 @@ import sys
 import subprocess
 from pathlib import Path
 
+from maas_deploy.access import display_access
 from maas_deploy.config import INSTALL_MODE, ConfigError, load_config, validate
 from maas_deploy.iso import build
 from maas_deploy.netplan import render_netplan
@@ -101,6 +102,13 @@ def command_images() -> int:
     return 0
 
 
+def command_console_access() -> int:
+    config = _config()
+    validate(config, INSTALL_MODE)
+    display_access(config, Path("/etc/maas-provision/secrets.env"))
+    return 0
+
+
 def _dhcp_change(enabled: bool, phrase: str, emergency: bool = False) -> int:
     config = _config()
     validate(config, INSTALL_MODE)
@@ -152,6 +160,7 @@ def main(argv: list[str] | None = None) -> int:
         "maas": command_maas,
         "network": command_network,
         "images": command_images,
+        "console-access": command_console_access,
         "healthcheck": command_healthcheck,
         "backup": command_backup,
         "restore": command_restore,

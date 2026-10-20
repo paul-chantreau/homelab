@@ -27,3 +27,6 @@ if ! ansible-playbook install.yml; then
 fi
 touch "${STATE}/complete"
 echo "Provisioning completed."
+if ! python3 -m maas_deploy console-access; then
+  echo "MAAS is ready, but its access details could not be displayed on tty1."
+fi

@@ -6,6 +6,8 @@ import subprocess
 import textwrap
 from pathlib import Path
 
+import pytest
+
 from maas_deploy.backup import select_expired
 from maas_deploy.discovery import assemble, summary
 from maas_deploy.diskmatch import matching_disks
@@ -74,7 +76,8 @@ def test_grub_patch_escapes_the_datasource_semicolon():
     assert patch_grub(patched) == patched
 
 
-def test_first_boot_retries_then_records_completion(tmp_path):
+@pytest.mark.parametrize('display_fails', [False, True])
+def test_first_boot_retries_then_records_completion(tmp_path, display_fails):
     root = tmp_path / "opt"
     state = tmp_path / "state"
     logs = tmp_path / "log"
@@ -96,6 +99,13 @@ def test_first_boot_retries_then_records_completion(tmp_path):
         encoding="utf-8",
     )
     (bindir / "ansible-playbook").chmod(0o755)
+    display_record = bindir / 'console-called'
+    (bindir / 'python3').write_text(
+        '#!/bin/bash\n'
+        f'printf \'%s\\n\' "$*" >> "{display_record}"\n'
+        f'exit {1 if display_fails else 0}\n'
+    )
+    (bindir / 'python3').chmod(0o755)
     env = os.environ.copy()
     env.update(
         {
@@ -110,12 +120,15 @@ def test_first_boot_retries_then_records_completion(tmp_path):
     first = subprocess.run(["bash", str(script)], env=env, check=False, text=True)
     assert first.returncode != 0
     assert not (state / "complete").exists()
+    assert not display_record.exists()
     second = subprocess.run(["bash", str(script)], env=env, check=False, text=True)
     assert second.returncode == 0
     assert (state / "complete").exists()
     third = subprocess.run(["bash", str(script)], env=env, check=False, text=True)
     assert third.returncode == 0
     assert marker.read_text(encoding="utf-8").count("called") == 2
+    assert display_record.read_text().splitlines() == ['-m maas_deploy console-access']
+    assert ('could not be displayed on tty1' in (logs / 'first-boot.log').read_text()) is display_fails
 
 
 def test_shell_scripts_parse():

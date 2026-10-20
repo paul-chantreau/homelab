@@ -1,6 +1,6 @@
 [Unit]
 Description=Local MAAS provisioning
-After=network-online.target
+After=network-online.target getty@tty1.service
 Wants=network-online.target
 ConditionPathExists=!/var/lib/maas-provision/complete
 

@@ -379,6 +379,11 @@ If automatic setup fails, read `/var/log/maas-provision/` and run `sudo maas sta
 
 ## 9. Accessing the MAAS interface
 
+When first-boot setup finishes successfully, the server's local console (`tty1`)
+displays the management URL, MAAS administrator username, and initial generated
+password. The password is written directly to that terminal; it is not copied
+into provisioning logs. This message appears once when setup completes.
+
 From a browser on the management LAN, use the IPv4 part of the `MANAGEMENT_ADDRESS` Secret (omit its `/prefix`):
 
 ```text
