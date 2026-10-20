@@ -1,23 +1,6 @@
 # Production MAAS on one Ubuntu server and a Netgear GS724Tv4
 
-This repository builds an Ubuntu Server autoinstall ISO, boots it from USB, and lets Ansible on that machine install MAAS. It assumes the switch is a Netgear GS724Tv4 ; the configuration and procedures use that fixed model.
-
-Record all of the following before changing a port, building an ISO, or installing Ubuntu:
-
-1. Switch management IP address.
-2. Physical port numbers for the router, the MAAS server, and each future machine.
-3. Existing VLAN membership and PVID of every port you might touch.
-4. Existing switch management VLAN.
-
-The software assumes a GS724Tv4. `config/network.yaml` contains only 11 site-specific inputs, all supplied by required GitHub Actions Secrets during a build. Physical addresses stay null until you inspect the switch and the LAN. The installer refuses to erase a disk until the required site settings are filled in.
-
-The procedure uses the GS724Tv4 administration manual (25 September 2013, covers GS716Tv3, GS724Tv4, and GS748Tv5): <https://www.downloads.netgear.com/files/GDC/GS716TV3/GS716Tv3_GS724Tv4_GS748Tv5_SWA_25Sept2013.pdf>
-
-The current product page may feature a newer revision: <https://www.netgear.com/business/wired/switches/smart-cloud/gs724t/>. Use the 2013 manual above, not the manual highlighted for a later switch.
-
-This article does not apply to the GS724Tv4 and must not be used as the procedure: <https://kb.netgear.com/31026/How-to-configure-a-VLAN-on-a-NETGEAR-managed-switch>. It describes a different managed-switch family. Its menu puts VLAN creation under Switching, VLAN, Advanced. The GS724Tv4 manual puts VLAN creation under Switching, VLAN, Basic.
-
-Virtual tests in this repository do not configure a GS724T and do not prove that VLAN 100 is isolated. That check happens on site, after the web interface has been changed, using the procedure in section M.
+This repository builds an Ubuntu Server autoinstall ISO along with Ansible to install MAAS. It assumes the switch is a Netgear GS724Tv4 ; the configuration and procedures use that specific model.
 
 ## A. Architecture overview
 
