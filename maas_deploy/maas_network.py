@@ -1,7 +1,7 @@
 """Plan MAAS subnet and VLAN API calls.
 
-The planner never enables DHCP. Activation is a separate, explicit operation
-and it only targets the provisioning VLAN recorded in the configuration.
+Subnet and range reconciliation precedes DHCP activation. DHCP operations
+only target the provisioning VLAN recorded in the configuration.
 """
 
 from __future__ import annotations
@@ -63,10 +63,11 @@ def _ranges_for(inventory: dict[str, Any], subnet_id: Any) -> list[dict[str, Any
 
 
 def plan_initial(network: dict[str, Any], inventory: dict[str, Any]) -> list[dict[str, Any]]:
-    """Create the provisioning subnet and ranges while leaving DHCP disabled.
+    """Reconcile the provisioning subnet and ranges before DHCP activation.
 
-    A later rerun does not turn provisioning DHCP off if an administrator has
-    already activated it. DHCP on the management VLAN is always forced off.
+    Preserve active provisioning DHCP during reconciliation. The runtime then
+    applies the default enabled state or a persistent operator stop request.
+    MAAS DHCP on the management VLAN is always forced off.
     """
     actions: list[dict[str, Any]] = []
     provisioning = network["provisioning"]

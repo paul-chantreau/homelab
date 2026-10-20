@@ -1,5 +1,5 @@
 ---
-- name: Configure the provisioning subnet and leave DHCP disabled
+- name: Configure the provisioning subnet and enable DHCP by default
   ansible.builtin.command:
     argv: [python3, -m, maas_deploy, network]
   environment:

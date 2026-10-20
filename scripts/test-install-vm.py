@@ -140,9 +140,18 @@ def main():
             restored = subprocess.run([*ssh, 'sudo -n maas-restore --confirm RESTORE ' + shlex.quote(archive) + ' && sudo -n maas-healthcheck'], capture_output=True, text=True)
             (work / 'restore.log').write_text(restored.stdout + restored.stderr)
             restored.check_returncode()
-            rerun = subprocess.run([*ssh, 'cd /opt/maas-deploy/ansible && sudo -n ansible-playbook install.yml'], capture_output=True, text=True)
+            vlan_id = config.network['provisioning']['vlan_id']
+            stop_phrase = shlex.quote(f'DEACTIVATE DHCP ON VLAN {vlan_id}')
+            stopped = subprocess.run([*ssh, f"printf '%s\\n' {stop_phrase} | sudo -n maas-network-deactivate && sudo -n maas-healthcheck"], capture_output=True, text=True)
+            (work / 'dhcp-stop.log').write_text(stopped.stdout + stopped.stderr)
+            stopped.check_returncode()
+            rerun = subprocess.run([*ssh, 'cd /opt/maas-deploy/ansible && sudo -n ansible-playbook install.yml && sudo -n maas-healthcheck'], capture_output=True, text=True)
             (work / 'rerun.log').write_text(rerun.stdout + rerun.stderr)
             rerun.check_returncode()
+            start_phrase = shlex.quote(f'ACTIVATE DHCP ON VLAN {vlan_id}')
+            resumed = subprocess.run([*ssh, f"printf '%s\\n' {start_phrase} | sudo -n maas-network-activate && sudo -n maas-healthcheck"], capture_output=True, text=True)
+            (work / 'dhcp-resume.log').write_text(resumed.stdout + resumed.stderr)
+            resumed.check_returncode()
             # Verify that a reboot retains dependencies/config and service readiness.
             subprocess.run([*ssh, 'sudo -n reboot'], capture_output=True)
             time.sleep(20)
@@ -154,7 +163,7 @@ def main():
             else:
                 raise RuntimeError('MAAS did not recover after reboot')
             (work / 'result.json').write_text(json.dumps({'passed': True, 'acceleration': args.accel,
-                                                         'checks': ['UEFI install', 'MAAS API and VLAN health', 'private backup', 'database restore', 'Ansible rerun', 'reboot']}, indent=2))
+                                                         'checks': ['UEFI install', 'automatic provisioning DHCP', 'MAAS API and VLAN health', 'private backup', 'database restore', 'DHCP stop persists through Ansible rerun', 'manual DHCP resume', 'reboot']}, indent=2))
             print('Full installation, command symlinks, backup, restore, rerun and reboot checks passed.', flush=True)
         finally:
             try:

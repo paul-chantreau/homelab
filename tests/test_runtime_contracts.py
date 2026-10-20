@@ -1,4 +1,5 @@
 """Exercise production orchestration at the MAAS 3.7 CLI/API boundary."""
+import copy
 import json
 from types import SimpleNamespace
 
@@ -108,6 +109,50 @@ def test_inconsistent_topology_is_rejected(ready, change):
         plan_enable(ready.network, inventory)
 
 
+@pytest.mark.parametrize('state', ['ready', 'range-missing', 'enable-failed'])
+def test_network_setup_creates_ranges_before_automatic_dhcp(ready, tmp_path, monkeypatch, state):
+    initial = _inventory()
+    initial['subnets'] = initial['subnets'][1:]
+    initial['ipranges'] = []
+    configured = _inventory()
+    configured['vlans'][1]['dhcp_on'] = False
+    configured['subnets'][0]['id'] = 42
+    configured['ipranges'][0]['subnet']['id'] = 42
+    if state == 'range-missing':
+        configured['ipranges'] = []
+    final = copy.deepcopy(configured)
+    final['vlans'][0]['dhcp_on'] = state != 'enable-failed'
+    snapshots = iter([initial, configured, final])
+    calls = []
+
+    def run(command, **kwargs):
+        calls.append(command)
+        return result(json.dumps({'id': 42}) if command[2:4] == ['subnets', 'create'] else '')
+
+    monkeypatch.setattr(runtime, 'load', lambda _: {'MAAS_API_KEY': 'consumer:token:secret'})
+    monkeypatch.setattr(runtime, '_run', run)
+    monkeypatch.setattr(runtime, 'inventory', lambda _: copy.deepcopy(next(snapshots)))
+    if state == 'ready':
+        assert runtime.apply_network(ready, tmp_path / 'secrets.env', tmp_path) == 'ready'
+    elif state == 'range-missing':
+        with pytest.raises(PlanError, match='dynamic range'):
+            runtime.apply_network(ready, tmp_path / 'secrets.env', tmp_path)
+    else:
+        with pytest.raises(runtime.SetupError, match='dhcp_on=False'):
+            runtime.apply_network(ready, tmp_path / 'secrets.env', tmp_path)
+
+    ranges = [command for command in calls if command[2:4] == ['ipranges', 'create']]
+    assert len(ranges) == 2
+    assert all('subnet=42' in command for command in ranges)
+    enabled = [command for command in calls if 'dhcp_on=true' in command]
+    if state == 'range-missing':
+        assert enabled == []
+    else:
+        assert len(enabled) == 1
+        assert enabled[0][4:6] == ['1', '100']
+        assert all(calls.index(command) < calls.index(enabled[0]) for command in ranges)
+
+
 def test_incomplete_or_wrong_architecture_images_cannot_be_ready():
     resource = {'name': 'ubuntu/noble', 'type': 'Synced', 'architecture': 'amd64/generic', 'sets': {}}
     assert not runtime._image_synced([resource], 'noble')
@@ -132,15 +177,20 @@ def test_cached_marker_is_revalidated_against_resource_details(ready, tmp_path, 
         runtime.apply_images(ready, secrets, marker)
 
 
-def test_health_uses_vlan_configuration_after_dhcp_activation(ready, tmp_path, monkeypatch):
+@pytest.mark.parametrize('disabled,dhcp_on,expected_status', [
+    (False, True, 'pass'), (False, False, 'fail'),
+    (True, False, 'pass'), (True, True, 'fail'),
+])
+def test_health_checks_default_dhcp_and_operator_stop(ready, tmp_path, monkeypatch, disabled, dhcp_on, expected_status):
     from maas_deploy.healthcheck import collect, evaluate
     from maas_deploy.secrets import ensure, store_api_key
     secrets = tmp_path / 'secrets.env'
     ensure(secrets)
     store_api_key(secrets, 'consumer:token:secret')
-    (tmp_path / 'dhcp-active').touch()
+    if disabled:
+        (tmp_path / 'dhcp-disabled').write_text('vlan 100\n')
     inventory = _inventory()
-    inventory['vlans'][0]['dhcp_on'] = True
+    inventory['vlans'][0]['dhcp_on'] = dhcp_on
     inventory['vlans'][1]['dhcp_on'] = False
     monkeypatch.setattr(runtime, 'inventory', lambda *a: inventory)
     def run(command, **kwargs):
@@ -150,5 +200,6 @@ def test_health_uses_vlan_configuration_after_dhcp_activation(ready, tmp_path, m
     monkeypatch.setattr(runtime, '_run', run)
     snapshot = collect(ready, secrets, tmp_path)
     assert snapshot['management_dhcp_on'] is False
-    assert snapshot['provisioning_dhcp_on'] is True
-    assert evaluate(snapshot)['outcome'] == 'pass'
+    assert snapshot['provisioning_dhcp_on'] is dhcp_on
+    assert snapshot['provisioning_dhcp_expected'] is not disabled
+    assert evaluate(snapshot)['checks']['provisioning_dhcp'] == expected_status

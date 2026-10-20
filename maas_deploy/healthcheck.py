@@ -50,7 +50,7 @@ def collect(config, secrets_path, state_dir):
         'postgresql_active': _run(['pg_isready', '-h', '127.0.0.1', '-p', '5432'], check=False).returncode == 0,
         'management_dhcp_on': management_dhcp,
         'provisioning_dhcp_on': provisioning.get('dhcp_on'),
-        'provisioning_dhcp_expected': (state_dir / 'dhcp-active').exists(),
+        'provisioning_dhcp_expected': not (state_dir / 'dhcp-disabled').exists(),
         'disk_used_percent': usage.used * 100 / usage.total,
         'secrets_mode': stat.S_IMODE(secrets_path.stat().st_mode),
     }

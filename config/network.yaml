@@ -4,7 +4,7 @@
 # Installation is refused until validate-config.py --mode install succeeds.
 network:
   # Only site-specific inputs belong here. The GS724Tv4 model, isolated VLAN
-  # topology, disabled forwarding, and explicit DHCP activation are fixed policy.
+  # topology, disabled forwarding, and automatic DHCP activation are fixed policy.
   management:
     # MAC address of the server's single physical NIC.
     interface_mac: null
@@ -22,6 +22,6 @@ network:
     # Address of this server on the provisioning VLAN. Outside the DHCP pool.
     controller_address: null
     dhcp:
-      # DHCP stays disabled until maas-network-activate is confirmed.
+      # MAAS enables DHCP on this VLAN after configuring and checking this pool.
       range_start: null
       range_end: null

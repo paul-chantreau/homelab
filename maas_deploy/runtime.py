@@ -17,7 +17,8 @@ from pathlib import Path
 from typing import Any
 
 from maas_deploy.config import LoadedConfig
-from maas_deploy.maas_network import plan_initial, render_maas_command
+from maas_deploy.files import atomic_write
+from maas_deploy.maas_network import controller_vlan, plan_disable, plan_enable, plan_initial, render_maas_command
 from maas_deploy.maas_setup import advertised_url, build_steps, database_uri
 from maas_deploy.postgres_setup import plan
 from maas_deploy.redact import redact
@@ -199,7 +200,7 @@ def inventory(profile: str) -> dict[str, Any]:
     }
 
 
-def apply_network(config: LoadedConfig, secrets_path: Path) -> str:
+def apply_network(config: LoadedConfig, secrets_path: Path, state_dir: Path) -> str:
     secrets = load(secrets_path)
     profile = config.deployment["maas"]["admin_username"]
     _run(["maas", "login", profile, "http://127.0.0.1:5240/MAAS/", secrets["MAAS_API_KEY"]])
@@ -227,8 +228,33 @@ def apply_network(config: LoadedConfig, secrets_path: Path) -> str:
                         args["subnet"] = replacement
                 continue
             _run(render_maas_command(profile, action))
+        apply_dhcp(config, secrets_path, state_dir, enabled=not (state_dir / "dhcp-disabled").exists())
         return "ready"
     raise SetupError(last_error)
+
+
+def apply_dhcp(config: LoadedConfig, secrets_path: Path, state_dir: Path, *, enabled: bool) -> None:
+    """Apply the provisioning DHCP state and preserve an operator's stop request."""
+    provisioning = config.network["provisioning"]
+    vlan_id = int(provisioning["vlan_id"])
+    disabled = state_dir / "dhcp-disabled"
+    if not enabled:
+        state_dir.mkdir(parents=True, exist_ok=True, mode=0o750)
+        atomic_write(disabled, f"vlan {vlan_id}\n")
+    secrets = load(secrets_path)
+    profile = config.deployment["maas"]["admin_username"]
+    _run(["maas", "login", profile, "http://127.0.0.1:5240/MAAS/", secrets["MAAS_API_KEY"]])
+    current = inventory(profile)
+    actions = plan_enable(config.network, current) if enabled else plan_disable(config.network, current)
+    for action in actions:
+        if int(action.get("vid", vlan_id)) != vlan_id:
+            raise SetupError("Refusing a DHCP change that does not target the provisioning VLAN.")
+        _run(render_maas_command(profile, action))
+    confirmed = controller_vlan(config.network, inventory(profile)).get("dhcp_on")
+    if confirmed is not enabled:
+        raise SetupError(f"MAAS reports dhcp_on={confirmed} after the change.")
+    if enabled:
+        disabled.unlink(missing_ok=True)
 
 
 def apply_images(config: LoadedConfig, secrets_path: Path, marker: Path) -> str:

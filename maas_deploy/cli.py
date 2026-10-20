@@ -11,9 +11,8 @@ from pathlib import Path
 from maas_deploy.config import INSTALL_MODE, ConfigError, load_config, validate
 from maas_deploy.iso import build
 from maas_deploy.netplan import render_netplan
-from maas_deploy.maas_network import PlanError, controller_vlan, plan_disable, plan_enable, render_maas_command
-from maas_deploy.runtime import SetupError, _run, apply_images, apply_maas, apply_network, apply_postgres, inventory
-from maas_deploy.secrets import load
+from maas_deploy.maas_network import PlanError
+from maas_deploy.runtime import SetupError, apply_dhcp, apply_images, apply_maas, apply_network, apply_postgres
 
 
 def _root() -> Path:
@@ -61,7 +60,7 @@ def command_maas() -> int:
 def command_network() -> int:
     config = _config()
     validate(config, INSTALL_MODE)
-    print(apply_network(config, Path("/etc/maas-provision/secrets.env")))
+    print(apply_network(config, Path("/etc/maas-provision/secrets.env"), _state()))
     return 0
 
 
@@ -114,28 +113,11 @@ def _dhcp_change(enabled: bool, phrase: str, emergency: bool = False) -> int:
         expected = f"DEACTIVATE DHCP ON VLAN {vlan_id}"
     if phrase != expected:
         return _die("Confirmation did not match. DHCP was not changed.")
-    profile = config.deployment["maas"]["admin_username"]
-    secrets = load(Path("/etc/maas-provision/secrets.env"))
-    _run(["maas", "login", profile, "http://127.0.0.1:5240/MAAS/", secrets["MAAS_API_KEY"]])
-    current = inventory(profile)
-    actions = plan_enable(config.network, current) if enabled else plan_disable(config.network, current)
     subnet = config.network["provisioning"]["subnet"]
     print(f"Provisioning subnet: {subnet}")
     print(f"Provisioning VLAN: {vlan_id}")
     print("Management VLAN DHCP is not changed by this command.")
-    for action in actions:
-        if int(action.get("vid", vlan_id)) != vlan_id:
-            return _die("Refusing a DHCP change that does not target the provisioning VLAN.")
-        _run(render_maas_command(profile, action))
-    confirmed = bool(controller_vlan(config.network, inventory(profile)).get("dhcp_on"))
-    if confirmed is not enabled:
-        return _die(f"MAAS reports dhcp_on={confirmed} after the change.")
-    marker = _state() / "dhcp-active"
-    if enabled:
-        marker.parent.mkdir(parents=True, exist_ok=True)
-        marker.write_text(f"vlan {vlan_id}\n", encoding="utf-8")
-    elif marker.exists():
-        marker.unlink()
+    apply_dhcp(config, Path("/etc/maas-provision/secrets.env"), _state(), enabled=enabled)
     print("DHCP is active." if enabled else "DHCP is stopped.")
     return 0
 

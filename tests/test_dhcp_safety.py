@@ -1,4 +1,4 @@
-"""DHCP requires explicit confirmation and the configured provisioning topology."""
+"""Provisioning DHCP starts automatically and retains explicit operator controls."""
 
 import copy
 import json
@@ -11,7 +11,7 @@ import sys
 import pytest
 import yaml
 
-from maas_deploy import cli
+from maas_deploy import cli, runtime
 from maas_deploy.maas_network import PlanError, plan_disable, plan_enable, plan_initial, render_maas_command
 
 
@@ -43,7 +43,7 @@ def _inventory():
     }
 
 
-def test_initial_plan_disables_management_dhcp_and_does_not_enable_provisioning(ready):
+def test_subnet_reconciliation_disables_management_dhcp_before_activation(ready):
     actions = plan_initial(ready.network, _inventory())
     rendered = [" ".join(render_maas_command("admin", action)) for action in actions]
     assert any("dhcp_on=false" in command and " 0 1 " in f" {command} " or command.endswith("0 1 dhcp_on=false") for command in rendered)
@@ -99,16 +99,16 @@ def dhcp_cli(ready, tmp_path, monkeypatch):
 
     def run(command):
         calls.append(command)
-        if 'dhcp_on=true' in command:
-            current['vlans'][0]['dhcp_on'] = True
-        elif 'dhcp_on=false' in command:
-            current['vlans'][0]['dhcp_on'] = False
+        if command[:4] == ['maas', 'admin', 'vlan', 'update']:
+            target = next(vlan for vlan in current['vlans'] if vlan['vid'] == int(command[5]))
+            target['dhcp_on'] = 'dhcp_on=true' in command
+        return subprocess.CompletedProcess(command, 0, stdout='')
 
     monkeypatch.setattr(cli, '_config', lambda: ready)
     monkeypatch.setattr(cli, '_state', lambda: state)
-    monkeypatch.setattr(cli, 'load', lambda _: {'MAAS_API_KEY': 'consumer:token:secret'})
-    monkeypatch.setattr(cli, '_run', run)
-    monkeypatch.setattr(cli, 'inventory', lambda _: copy.deepcopy(current))
+    monkeypatch.setattr(runtime, 'load', lambda _: {'MAAS_API_KEY': 'consumer:token:secret'})
+    monkeypatch.setattr(runtime, '_run', run)
+    monkeypatch.setattr(runtime, 'inventory', lambda _: copy.deepcopy(current))
     return calls, current, state
 
 
@@ -121,7 +121,7 @@ def test_activation_needs_no_validation_report(dhcp_cli, monkeypatch, old_report
     monkeypatch.setenv('MAAS_DHCP_CONFIRM', 'ACTIVATE DHCP ON VLAN 100')
 
     assert cli.main(['dhcp-enable']) == 0
-    assert (state / 'dhcp-active').read_text() == 'vlan 100\n'
+    assert not (state / 'dhcp-disabled').exists()
     assert calls[1:] == [
         ['maas', 'admin', 'vlan', 'update', '1', '100', 'dhcp_on=true', 'primary_rack=rack1']
     ]
@@ -160,7 +160,7 @@ def test_activation_refuses_inconsistent_maas_inventory(dhcp_cli, monkeypatch, c
 
     assert cli.main(['dhcp-enable']) == 1
     assert len(calls) == 1 and calls[0][:2] == ['maas', 'login']
-    assert not (state / 'dhcp-active').exists()
+    assert not (state / 'dhcp-disabled').exists()
     assert capsys.readouterr().err
 
 
@@ -175,10 +175,10 @@ def test_invalid_configuration_cannot_activate_dhcp(ready, dhcp_cli, monkeypatch
 
 def test_failed_maas_enable_does_not_record_success(dhcp_cli, monkeypatch):
     calls, _, state = dhcp_cli
-    monkeypatch.setattr(cli, '_run', lambda command: calls.append(command))
+    monkeypatch.setattr(runtime, '_run', lambda command: calls.append(command))
     monkeypatch.setenv('MAAS_DHCP_CONFIRM', 'ACTIVATE DHCP ON VLAN 100')
     assert cli.main(['dhcp-enable']) == 1
-    assert not (state / 'dhcp-active').exists()
+    assert not (state / 'dhcp-disabled').exists()
 
 
 @pytest.mark.parametrize('emergency', [False, True])
@@ -186,14 +186,55 @@ def test_deactivation_still_works_without_reports(dhcp_cli, monkeypatch, emergen
     calls, current, state = dhcp_cli
     current['vlans'][0]['dhcp_on'] = True
     state.mkdir()
-    (state / 'dhcp-active').touch()
     monkeypatch.setenv('MAAS_DHCP_EMERGENCY', '1' if emergency else '0')
     monkeypatch.setenv('MAAS_DHCP_CONFIRM', ('EMERGENCY ' if emergency else '') + 'DEACTIVATE DHCP ON VLAN 100')
 
     assert cli.main(['dhcp-disable']) == 0
-    assert not (state / 'dhcp-active').exists()
+    assert (state / 'dhcp-disabled').read_text() == 'vlan 100\n'
     assert calls[1:] == [['maas', 'admin', 'vlan', 'update', '1', '100', 'dhcp_on=false']]
     assert current['vlans'][1]['dhcp_on'] is True
+
+
+def test_automatic_setup_enables_only_provisioning_dhcp(ready, dhcp_cli):
+    calls, current, state = dhcp_cli
+    assert runtime.apply_network(ready, Path('unused-secrets.env'), state) == 'ready'
+    assert current['vlans'][0]['dhcp_on'] is True
+    assert current['vlans'][1]['dhcp_on'] is False
+    assert not (state / 'dhcp-disabled').exists()
+    enabled = [command for command in calls if 'dhcp_on=true' in command]
+    assert enabled == [['maas', 'admin', 'vlan', 'update', '1', '100', 'dhcp_on=true', 'primary_rack=rack1']]
+    management_stop = ['maas', 'admin', 'vlan', 'update', '0', '1', 'dhcp_on=false']
+    assert calls.index(management_stop) < calls.index(enabled[0])
+
+
+def test_manual_stop_persists_across_setup_reruns(ready, dhcp_cli, monkeypatch):
+    calls, current, state = dhcp_cli
+    monkeypatch.setenv('MAAS_DHCP_CONFIRM', 'DEACTIVATE DHCP ON VLAN 100')
+    assert cli.main(['dhcp-disable']) == 0
+    calls.clear()
+    assert runtime.apply_network(ready, Path('unused-secrets.env'), state) == 'ready'
+    assert current['vlans'][0]['dhcp_on'] is False
+    assert (state / 'dhcp-disabled').exists()
+    assert not any('dhcp_on=true' in command for command in calls)
+
+
+def test_manual_activation_clears_a_persistent_stop(dhcp_cli, monkeypatch):
+    _, _, state = dhcp_cli
+    state.mkdir()
+    (state / 'dhcp-disabled').write_text('vlan 100\n')
+    monkeypatch.setenv('MAAS_DHCP_CONFIRM', 'ACTIVATE DHCP ON VLAN 100')
+    assert cli.main(['dhcp-enable']) == 0
+    assert not (state / 'dhcp-disabled').exists()
+
+
+def test_failed_stop_still_prevents_automatic_reactivation(dhcp_cli, monkeypatch):
+    _, _, state = dhcp_cli
+    def unavailable(command):
+        raise runtime.SetupError('MAAS is unavailable')
+    monkeypatch.setattr(runtime, '_run', unavailable)
+    monkeypatch.setenv('MAAS_DHCP_CONFIRM', 'DEACTIVATE DHCP ON VLAN 100')
+    assert cli.main(['dhcp-disable']) == 1
+    assert (state / 'dhcp-disabled').read_text() == 'vlan 100\n'
 
 
 @pytest.mark.parametrize('extra_args', [[], ['--isolation-report', 'obsolete.json']])

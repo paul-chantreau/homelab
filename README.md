@@ -116,7 +116,7 @@ Choose the provisioning network, save its **repository Actions Secrets**, then c
 | `PROVISIONING_DHCP_START` | First dynamic IPv4 address inside `PROVISIONING_SUBNET`. |
 | `PROVISIONING_DHCP_END` | Last dynamic IPv4 address in that subnet; it must be greater than `PROVISIONING_DHCP_START`. |
 
-Keep the controller and DHCP endpoints away from the subnet and broadcast addresses. The provisioning VLAN stays isolated: the server does not forward packets, no provisioning gateway is configured, and MAAS DHCP starts disabled.
+Keep the controller and DHCP endpoints away from the subnet and broadcast addresses. Complete the switch configuration before booting the installer: first-boot setup enables MAAS DHCP automatically on the provisioning VLAN. The server does not forward packets and no provisioning gateway is configured.
 
 The instructions below use **100 to mean the value saved in `PROVISIONING_VLAN_ID`**. Substitute your chosen value throughout if it differs. The management VLAN means `MANAGEMENT_VLAN_ID`.
 
@@ -233,7 +233,7 @@ Copy the full line beginning with `ssh-ed25519`, `ssh-rsa`, or another supported
 
 After entering the required values, run **Actions → Check installation variables → Run workflow**. It checks missing inputs, disk alternatives, defaults, and network consistency. Future ISO builds embed the resolved settings; changing GitHub settings does not update an already installed server. Booting the built ISO authorizes erasure of the identified target disk.
 
-The MAAS and PostgreSQL passwords are generated on the server in `/etc/maas-provision/secrets.env`; do not create password Secrets for them. GS724Tv4 hardware assumptions, isolation policy, and explicit DHCP activation are fixed behavior, not optional inputs.
+The MAAS and PostgreSQL passwords are generated on the server in `/etc/maas-provision/secrets.env`; do not create password Secrets for them. GS724Tv4 hardware assumptions, isolation policy, and automatic provisioning DHCP activation are fixed behavior, not optional inputs.
 
 ## 6. Architecture overview
 
@@ -265,14 +265,10 @@ local Ansible on that server
 PostgreSQL 16 + MAAS 3.7 region+rack
     |
     v
-DHCP remains disabled
-    |
-    v
-on-site GS724T web configuration
-    |
-    v
-explicit MAAS DHCP activation on the provisioning VLAN only
+MAAS DHCP enabled automatically on the provisioning VLAN only
 ```
+
+Configure the GS724Tv4 VLAN membership and PVIDs in [section 4](#4-vlan-configuration) before booting the installer.
 
 There is one physical Ethernet port on the server. The management LAN and the provisioning VLAN share that port and the switch port it is plugged into.
 
@@ -357,21 +353,11 @@ Using balenaEtcher on Windows, macOS, or Linux:
 2. Select the USB drive ;
 3. Flash.
 
-## 8. Activating MAAS DHCP
+## 8. MAAS DHCP
 
-After installing the controller and configuring the switch as described in [section 4](#4-vlan-configuration), activate DHCP on the provisioning VLAN. Installation configures the address pool with DHCP left off.
+First-boot Ansible setup creates the provisioning subnet and the `PROVISIONING_DHCP_START`–`PROVISIONING_DHCP_END` address pool, then enables MAAS DHCP automatically on `PROVISIONING_VLAN_ID`. No activation command is required for a new installation.
 
-```bash
-sudo maas-network-activate
-```
-
-The command prints `PROVISIONING_VLAN_ID`, `PROVISIONING_SUBNET`, and the `PROVISIONING_DHCP_START`–`PROVISIONING_DHCP_END` range. It uses the installed configuration and requires no temporary host or capture report. Type:
-
-```text
-ACTIVATE DHCP ON VLAN 100
-```
-
-Use the `PROVISIONING_VLAN_ID` value it prints if it differs from this example of 100. The command verifies the rack controller's interface, provisioning VLAN, managed subnet, and configured dynamic range in MAAS before enabling DHCP. It checks that MAAS reports DHCP enabled on that VLAN afterward and writes `/var/lib/maas-provision/dhcp-active`. It leaves the management VLAN and the router DHCP service unchanged. Physical switch membership and PVIDs remain your responsibility; activation does not test broadcast isolation.
+Setup verifies the rack controller's interface, VLAN, managed subnet, and dynamic range using fresh MAAS inventory before activation, then checks that MAAS reports DHCP enabled. MAAS DHCP stays disabled on the management VLAN; the existing router DHCP service is unchanged. Physical switch membership and PVIDs must already match [section 4](#4-vlan-configuration); setup does not test broadcast isolation.
 
 Emergency stop:
 
@@ -387,7 +373,9 @@ EMERGENCY DEACTIVATE DHCP ON VLAN 100
 
 The ordinary stop is `sudo maas-network-deactivate` and the phrase `DEACTIVATE DHCP ON VLAN 100`. Both call `vlan update` with `dhcp_on=false` for the provisioning VLAN. Neither command talks to the router, and neither enables DHCP on the management VLAN.
 
-If activation fails, leave DHCP off, read `/var/log/maas-provision/`, and run `sudo maas status`. Do not widen the range onto the management subnet to "make PXE work".
+Use your `PROVISIONING_VLAN_ID` in these confirmation phrases if it differs from 100. An explicit stop is recorded locally in `/var/lib/maas-provision/dhcp-disabled` and persists across Ansible reruns. To resume after a stop, run `sudo maas-network-activate` and confirm `ACTIVATE DHCP ON VLAN 100`; successful activation clears the stop record.
+
+If automatic setup fails, read `/var/log/maas-provision/` and run `sudo maas status`. Setup does not report completion when DHCP activation fails. Do not widen the range onto the management subnet to "make PXE work".
 
 ## 9. Accessing the MAAS interface
 
@@ -405,7 +393,7 @@ After login, confirm:
 
 - Controllers: one controller, both region and rack.
 - Subnets: `PROVISIONING_SUBNET`, with `PROVISIONING_CONTROLLER_ADDRESS` reserved and the dynamic range matching `PROVISIONING_DHCP_START`–`PROVISIONING_DHCP_END`.
-- VLANs: DHCP enabled only after [section 8](#8-activating-maas-dhcp), and only on the provisioning VLAN.
+- VLANs: DHCP enabled automatically on the provisioning VLAN as described in [section 8](#8-maas-dhcp); MAAS DHCP disabled on the management VLAN.
 - Images: Ubuntu Noble present and synced. `maas-images` records success in `/var/lib/maas-provision/images-synced`.
 
 The controller itself reaches the image mirror through the management default route. Commissioning machines reach the downloaded images through the rack controller on the provisioning VLAN.
