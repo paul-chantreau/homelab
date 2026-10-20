@@ -16,7 +16,7 @@ You will also need an out-of-band or local console access to reach the Netgear G
 
 ## 2. Network discovery and management settings
 
-Run discovery on the existing management LAN.
+Run discovery on a computer connected to the existing management LAN.
 
 On Windows PowerShell, from the repository directory:
 
@@ -50,13 +50,13 @@ Then create these **repository Actions Secrets**, using the Settings procedure i
 | `MANAGEMENT_DNS` | Reachable IPv4 DNS resolvers as a nonempty JSON list, such as `["192.0.2.1"]`. Confirm the values in the router settings or discovery report. |
 | `MANAGEMENT_VLAN_ID` | The existing untagged management VLAN/PVID from the switch UI, as an integer. Do not change the switch management VLAN to match an example. |
 
-The workstation's address identifies the LAN and prefix; `MANAGEMENT_ADDRESS` is the separate address chosen for the MAAS server. The switch management address is also separate and has no Actions input. Discovery does not create DHCP reservations or assign the server address. Netplan applies `MANAGEMENT_ADDRESS` when the controller is installed.
+The computer's own address identifies the LAN and prefix; `MANAGEMENT_ADDRESS` is the separate address chosen for the MAAS server.
 
 Choose the provisioning network and its Secrets in [section 4](#4-vlan-configuration).
 
 ## 3. Physical port mapping
 
-Identify the switch port connected to the router, the MAAS server, and each node before changing VLAN membership. Use the front-panel link LEDs: disconnect one cable, record which port loses its link, reconnect it, and continue. A port may appear in only one role. The GS724Tv4 has 24 copper ports and two SFP ports, numbered 1–26.
+Identify and record in local notes the switch ports connected to the router, the MAAS server, and each node before changing VLAN membership.
 
 Record the port numbers in private local notes. **Physical port numbers have no corresponding GitHub Secret or Variable.** Software does not configure or query the switch ports. Do not create `SWITCH_ROUTER_PORT`, `SWITCH_MAAS_PORT`, or `SWITCH_PROVISIONING_PORTS`; those inputs were removed.
 
